@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>价格变动 × 销量影响 — 3CHUB</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0f1117; --card: #1a1d27; --border: #2a2d3a;
+  --text: #e1e4ea; --muted: #6b7280;
+  --red: #ef4444; --green: #22c55e; --blue: #3b82f6;
+  --orange: #f59e0b; --purple: #8b5cf6; --cyan: #06b6d4;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 20px; }
+.container { max-width: 1200px; margin: 0 auto; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.header h1 { font-size: 20px; font-weight: 700; }
+.header .date { color: var(--muted); font-size: 12px; }
+
+.stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 20px; }
+.s { background: var(--card); border:1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center; }
+.s .label { font-size: 11px; color: var(--muted); }
+.s .value { font-size: 26px; font-weight: 800; }
+.s .sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.s.danger .value { color: var(--red); }
+.s.warn .value { color: var(--orange); }
+.s.info .value { color: var(--blue); }
+.s.good .value { color: var(--green); }
+
+.chart-card { background: var(--card); border:1px solid var(--border); border-radius: 10px; padding: 18px; margin-bottom: 20px; }
+.chart-card h2 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+.chart-wrap { height: 400px; position: relative; }
+
+.controls { display: flex; gap: 10px; margin-bottom: 14px; align-items: center; flex-wrap: wrap; }
+.controls select, .controls input { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px 10px; font-size: 12px; }
+.controls label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+.sort-btn { background: var(--border); border: none; color: var(--text); padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+.sort-btn.active { background: var(--blue); }
+
+.table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead th { background: var(--card); padding: 10px 8px; text-align: left; white-space: nowrap; border-bottom: 2px solid var(--border); position: sticky; top: 0; }
+tbody td { padding: 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+tbody tr:hover { background: rgba(255,255,255,0.03); }
+.badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+.badge-up { background: rgba(239,68,68,0.15); color: var(--red); }
+.badge-down { background: rgba(34,197,94,0.15); color: var(--green); }
+.badge-pending { background: rgba(245,158,11,0.15); color: var(--orange); }
+.neg { color: var(--red); }
+.pos { color: var(--green); }
+.sev-3 { background: rgba(220,38,38,0.08); }
+.sev-2 { background: rgba(245,158,11,0.06); }
+
+.footer { text-align: center; color: var(--muted); font-size: 11px; padding: 12px; }
+
+.info-note { background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.2); border-radius: 8px; padding: 10px 14px; font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+.info-note span { color: var(--blue); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>价格变动 &times; 销量影响分析</h1>
+    <div class="date">数据截止: 2026-06-25 | 3CHUB</div>
+  </div>
+
+  <div class="stats" id="statsCards"></div>
+
+  <div class="chart-card">
+    <h2>调价幅度 vs 销量变化 (散点图)</h2>
+    <div class="chart-wrap"><canvas id="scatterChart"></canvas></div>
+  </div>
+
+  <div class="controls">
+    <label>品牌: <select id="brandFilter"><option value="">全部</option></select></label>
+    <label>方向: <select id="dirFilter"><option value="">全部</option><option value="up">涨价</option><option value="down">降价</option></select></label>
+    <label>价位: <select id="tierFilter"><option value="">全部</option></select></label>
+    <div style="flex:1"></div>
+    <span style="font-size:12px;color:var(--muted)">排序:</span>
+    <button class="sort-btn active" data-sort="impact">冲击最大</button>
+    <button class="sort-btn" data-sort="elastic">弹性最高</button>
+    <button class="sort-btn" data-sort="price">涨幅最大</button>
+  </div>
+
+  <div class="info-note" id="infoNote"></div>
+  <div class="table-wrap" id="tableWrap"></div>
+
+  <div class="footer">3CHUB &middot; 价格变动&amp;销量影响分析 &middot; 2026-06-25</div>
+</div>
+
+<script>
+const DATA = [
+  {"brand":"TECNO","model":"SPARK 50-KN4(128+4)","short_model":"SPARK 50-KN4(128+4)","total_qty":3760,"daily_avg":179,"price_tier":"10w","turnover_days":20.4,"current_price":183700,"ver_date":"2026-06-24","from_price":173200,"to_price":183700,"price_pct":6.06,"before_avg":null,"after_avg":null,"sales_pct":null,"elasticity":null,"severity":0,"direction":"up","pending":true},
+  {"brand":"INFINIX","model":"SMART20-X6840(128+4)","short_model":"SMART20-X6840(128+4)","total_qty":1400,"daily_avg":66.7,"price_tier":"10w","turnover_days":19.2,"current_price":162900,"ver_date":"2026-06-24","from_price":154800,"to_price":162900,"price_pct":5.23,"before_avg":null,"after_avg":null,"sales_pct":null,"elasticity":null,"severity":0,"direction":"up","pending":true},
+  {"brand":"SAMSUNG","model":"GALAXY S26 ULTRA S948B(12+256GB)","short_model":"GALAXY S26 ULTRA S948B(12+256GB)","total_qty":6,"daily_avg":0.3,"price_tier":"100w以上","turnover_days":3.5,"current_price":1837200,"ver_date":"2026-06-24","from_price":1437200,"to_price":1837200,"price_pct":27.83,"before_avg":null,"after_avg":null,"sales_pct":null,"elasticity":null,"severity":0,"direction":"up","pending":true},
+  {"brand":"SAMSUNG","model":"GALAXY S26 ULTRA S948B(12+512GB)","short_model":"GALAXY S26 ULTRA S948B(12+512GB)","total_qty":2,"daily_avg":0.1,"price_tier":"100w以上","turnover_days":21,"current_price":2098400,"ver_date":"2026-06-24","from_price":1698400,"to_price":2098400,"price_pct":23.55,"before_avg":null,"after_avg":null,"sales_pct":null,"elasticity":null,"severity":0,"direction":"up","pending":true},
+  {"brand":"SAMSUNG","model":"GALAXY TAB A11(64+4)","short_model":"GALAXY TAB A11(64+4)","total_qty":1,"daily_avg":0,"price_tier":"10w","turnover_days":525,"current_price":192900,"ver_date":"2026-06-24","from_price":229000,"to_price":268100,"price_pct":17.07,"before_avg":null,"after_avg":null,"sales_pct":null,"elasticity":null,"severity":0,"direction":"up","pending":true},
+  {"brand":"ITEL","model":"A100C-A6611L(64+2)","short_model":"A100C-A6611L(64+2)","total_qty":603,"daily_avg":28.7,"price_tier":"10w","turnover_days":91.7,"current_price":105200,"ver_date":"2026-06-18","from_price":95900,"to_price":105200,"price_pct":9.7,"before_avg":32,"after_avg":2.3,"sales_pct":-92.8,"elasticity":9.6,"severity":559,"direction":"up","pending":false},
+  {"brand":"XIAOMI","model":"REDMI 15C(256+8)","short_model":"REDMI 15C(256+8)","total_qty":515,"daily_avg":24.5,"price_tier":"20w","turnover_days":29.2,"current_price":225900,"ver_date":"2026-06-18","from_price":196100,"to_price":225900,"price_pct":15.2,"before_avg":26.5,"after_avg":8.8,"sales_pct":-66.8,"elasticity":4.4,"severity":344,"direction":"up","pending":false},
+  {"brand":"XIAOMI","model":"REDMI 15C(128+4)","short_model":"REDMI 15C(128+4)","total_qty":725,"daily_avg":34.5,"price_tier":"10w","turnover_days":50.4,"current_price":167900,"ver_date":"2026-06-18","from_price":159800,"to_price":167900,"price_pct":5.07,"before_avg":32.1,"after_avg":17,"sales_pct":-47,"elasticity":9.3,"severity":340,"direction":"up","pending":false},
+  {"brand":"ITEL","model":"A200PLUS-A676L(128+3)","short_model":"A200PLUS-A676L(128+3)","total_qty":325,"daily_avg":15.5,"price_tier":"10w","turnover_days":69,"current_price":146400,"ver_date":"2026-06-18","from_price":129900,"to_price":146400,"price_pct":12.7,"before_avg":17,"after_avg":1.6,"sales_pct":-90.6,"elasticity":7.1,"severity":294,"direction":"up","pending":false},
+  {"brand":"ITEL","model":"CITY 200-C681L(128+4)","short_model":"CITY 200-C681L(128+4)","total_qty":542,"daily_avg":25.8,"price_tier":"10w","turnover_days":36,"current_price":145900,"ver_date":"2026-06-18","from_price":139900,"to_price":145900,"price_pct":4.29,"before_avg":24.5,"after_avg":11.5,"sales_pct":-53.1,"elasticity":12.4,"severity":287,"direction":"up","pending":false},
+  {"brand":"XIAOMI","model":"REDMI 15C(128+6)","short_model":"REDMI 15C(128+6)","total_qty":544,"daily_avg":25.9,"price_tier":"10w","turnover_days":34.4,"current_price":181100,"ver_date":"2026-06-18","from_price":169500,"to_price":181100,"price_pct":6.84,"before_avg":23.6,"after_avg":14.2,"sales_pct":-39.8,"elasticity":5.8,"severity":216,"direction":"up","pending":false},
+  {"brand":"ITEL","model":"A100C-A6611L(64+3)","short_model":"A100C-A6611L(64+3)","total_qty":899,"daily_avg":42.8,"price_tier":"10w","turnover_days":54.2,"current_price":105200,"ver_date":"2026-06-18","from_price":99900,"to_price":105200,"price_pct":5.31,"before_avg":38.5,"after_avg":30.7,"sales_pct":-20.3,"elasticity":3.8,"severity":182,"direction":"up","pending":false},
+  {"brand":"ITEL","model":"CITY 200-C681L(128+4) (0515)","short_model":"CITY 200-C681L(128+4)","total_qty":542,"daily_avg":25.8,"price_tier":"10w","turnover_days":36,"current_price":145900,"ver_date":"2026-05-21","from_price":145900,"to_price":139900,"price_pct":-4.11,"before_avg":27.6,"after_avg":20.9,"sales_pct":-24.3,"elasticity":5.9,"severity":131,"direction":"down","pending":false},
+  {"brand":"SAMSUNG","model":"GALAXY A07-A075F(128+4)","short_model":"GALAXY A07-A075F(128+4)","total_qty":481,"daily_avg":22.9,"price_tier":"10w","turnover_days":43.4,"current_price":160300,"ver_date":"2026-06-18","from_price":175300,"to_price":160300,"price_pct":-8.56,"before_avg":19.3,"after_avg":14.8,"sales_pct":-23.3,"elasticity":2.7,"severity":112,"direction":"down","pending":false},
+  {"brand":"XIAOMI","model":"REDMI 15(128+6)","short_model":"REDMI 15(128+6)","total_qty":128,"daily_avg":6.1,"price_tier":"20w","turnover_days":14.3,"current_price":228600,"ver_date":"2026-06-18","from_price":202400,"to_price":228600,"price_pct":12.94,"before_avg":6.9,"after_avg":1.7,"sales_pct":-75.4,"elasticity":5.8,"severity":96,"direction":"up","pending":false},
+  {"brand":"SAMSUNG","model":"GALAXY A07-A075F(64+4)","short_model":"GALAXY A07-A075F(64+4)","total_qty":346,"daily_avg":16.5,"price_tier":"10w","turnover_days":45.2,"current_price":136600,"ver_date":"2026-06-18","from_price":151600,"to_price":136600,"price_pct":-9.89,"before_avg":14.9,"after_avg":10.8,"sales_pct":-27.5,"elasticity":2.8,"severity":95,"direction":"down","pending":false},
+  {"brand":"XIAOMI","model":"REDMI 15(256+8)","short_model":"REDMI 15(256+8)","total_qty":179,"daily_avg":8.5,"price_tier":"20w","turnover_days":42.8,"current_price":276000,"ver_date":"2026-06-18","from_price":228900,"to_price":276000,"price_pct":20.58,"before_avg":8.3,"after_avg":4.3,"sales_pct":-48.2,"elasticity":2.3,"severity":86,"direction":"up","pending":false},
+  {"brand":"SAMSUNG","model":"GALAXY A06-A065F(128+4)","short_model":"GALAXY A06-A065F(128+4)","total_qty":142,"daily_avg":6.8,"price_tier":"10w","turnover_days":61.1,"current_price":149300,"ver_date":"2026-06-18","from_price":159300,"to_price":149300,"price_pct":-6.28,"before_avg":6.8,"after_avg":3.3,"sales_pct":-51.5,"elasticity":8.2,"severity":73,"direction":"down","pending":false},
+  {"brand":"ITEL","model":"A200PLUS-A676L(128+3) (0515)","short_model":"A200PLUS-A676L(128+3)","total_qty":325,"daily_avg":15.5,"price_tier":"10w","turnover_days":69,"current_price":146400,"ver_date":"2026-05-21","from_price":135900,"to_price":129900,"price_pct":-4.42,"before_avg":12.9,"after_avg":15.6,"sales_pct":20.9,"elasticity":4.7,"severity":67,"direction":"down","pending":false},
+  {"brand":"SAMSUNG","model":"GALAXY A06-A065F(64+4)","short_model":"GALAXY A06-A065F(64+4)","total_qty":393,"daily_avg":18.7,"price_tier":"10w","turnover_days":43.2,"current_price":122600,"ver_date":"2026-06-18","from_price":132600,"to_price":122600,"price_pct":-7.54,"before_avg":16.6,"after_avg":14.5,"sales_pct":-12.7,"elasticity":1.7,"severity":49,"direction":"down","pending":false},
+  {"brand":"VIVO","model":"Y31D(128+6)","short_model":"Y31D(128+6)","total_qty":68,"daily_avg":3.2,"price_tier":"30w","turnover_days":61.8,"current_price":349800,"ver_date":"2026-06-18","from_price":269800,"to_price":349800,"price_pct":29.65,"before_avg":2.1,"after_avg":1,"sales_pct":-52.4,"elasticity":1.8,"severity":35,"direction":"up","pending":false},
+  {"brand":"XIAOMI","model":"REDMI-NOTE15(256+8)","short_model":"REDMI-NOTE15(256+8)","total_qty":137,"daily_avg":6.5,"price_tier":"30w","turnover_days":38.5,"current_price":353200,"ver_date":"2026-06-18","from_price":337000,"to_price":353200,"price_pct":4.81,"before_avg":4.4,"after_avg":5.3,"sales_pct":20.5,"elasticity":4.3,"severity":28,"direction":"up","pending":false},
+  {"brand":"OPPO","model":"A6X(64+4)","short_model":"A6X(64+4)","total_qty":65,"daily_avg":3.1,"price_tier":"10w","turnover_days":64.3,"current_price":189900,"ver_date":"2026-06-18","from_price":219900,"to_price":189900,"price_pct":-13.64,"before_avg":2.7,"after_avg":3.7,"sales_pct":37,"elasticity":2.7,"severity":24,"direction":"down","pending":false},
+  {"brand":"OPPO","model":"A6X(128+4)","short_model":"A6X(128+4)","total_qty":37,"daily_avg":1.8,"price_tier":"20w","turnover_days":114.6,"current_price":224900,"ver_date":"2026-06-18","from_price":253900,"to_price":224900,"price_pct":-11.42,"before_avg":1.4,"after_avg":2.3,"sales_pct":64.3,"elasticity":5.6,"severity":23,"direction":"down","pending":false},
+  {"brand":"XIAOMI","model":"REDMI-NOTE15(128+6)","short_model":"REDMI-NOTE15(128+6)","total_qty":123,"daily_avg":5.9,"price_tier":"30w","turnover_days":64.5,"current_price":316900,"ver_date":"2026-06-18","from_price":298300,"to_price":316900,"price_pct":6.24,"before_avg":5.1,"after_avg":4.7,"sales_pct":-7.8,"elasticity":1.2,"severity":9,"direction":"up","pending":false}
+];
+
+const completed = DATA.filter(function(d){ return !d.pending; });
+const pending = DATA.filter(function(d){ return d.pending; });
+const upUp = completed.filter(function(d){ return d.direction==='up' && d.sales_pct>0; }).length;
+const upDown = completed.filter(function(d){ return d.direction==='up' && d.sales_pct<0; }).length;
+const downUp = completed.filter(function(d){ return d.direction==='down' && d.sales_pct>0; }).length;
+const downDown = completed.filter(function(d){ return d.direction==='down' && d.sales_pct<0; }).length;
+var filtered = DATA.slice();
+
+var scatterChart;
+var currentSort = 'impact';
+
+function fmtN(v){ return v==null||isNaN(v)?'--':v.toLocaleString(); }
+function fmtP(v){ return v==null||isNaN(v)?'--':(v>0?'+':'')+v.toFixed(1)+'%'; }
+function fmtPrice(v){ return v==null||isNaN(v)?'--':'₦'+v.toLocaleString(); }
+
+function severityClass(s){
+  if(!s||s===0) return '';
+  return s>=200?'sev-3':(s>=50?'sev-2':'');
+}
+
+function renderStats(){
+  var html = '';
+  html += '<div class="s danger"><div class="label">涨价 → 销量降</div><div class="value">'+upDown+'</div><div class="sub">100%涨价导致下降</div></div>';
+  html += '<div class="s good"><div class="label">降价 → 销量升</div><div class="value">'+downUp+'</div><div class="sub">有效降价</div></div>';
+  html += '<div class="s info"><div class="label">涨价 → 销量升</div><div class="value">'+upUp+'</div><div class="sub">逆势增长</div></div>';
+  html += '<div class="s warn"><div class="label">降价 → 销量降</div><div class="value">'+downDown+'</div><div class="sub">市场下行</div></div>';
+  document.getElementById('statsCards').innerHTML = html;
+}
+
+function renderChart(){
+  var ctx = document.getElementById('scatterChart').getContext('2d');
+  if(scatterChart) scatterChart.destroy();
+
+  var upCompleted = completed.filter(function(d){ return d.direction==='up'; });
+  var downCompleted = completed.filter(function(d){ return d.direction==='down'; });
+  var pendingEvents = pending.filter(function(d){ return d.direction==='up' || d.direction==='down'; });
+
+  function makeDataset(ary, color, label, shape, isPending){
+    var maxSize = isPending ? 8 : 14;
+    var sizes = ary.map(function(d){ return isPending ? 6 : Math.max(4, Math.min(maxSize, Math.sqrt(d.total_qty)/3)); });
+    return {
+      label: label,
+      data: ary.map(function(d){ return {x:d.price_pct*(d.direction==='down'?-1:1), y:d.sales_pct||0, model:d.model, brand:d.brand}; }),
+      backgroundColor: isPending ? 'transparent' : color,
+      borderColor: color,
+      borderWidth: isPending ? 2 : 1,
+      pointRadius: sizes,
+      pointHoverRadius: sizes.map(function(s){ return s+3; }),
+      pointStyle: shape||'circle'
+    };
+  }
+
+  var datasets = [];
+  if(upCompleted.length) datasets.push(makeDataset(upCompleted, '#ef4444', '涨价(已完成)', 'triangle', false));
+  if(downCompleted.length) datasets.push(makeDataset(downCompleted, '#22c55e', '降价(已完成)', 'circle', false));
+  if(pendingEvents.length) datasets.push(makeDataset(pendingEvents, '#f59e0b', '涨价(待观察)', 'rectRot', true));
+
+  scatterChart = new Chart(ctx, {
+    type: 'scatter',
+    data: { datasets: datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#e1e4ea', font: { size: 11 }, usePointStyle: true, padding: 16 } },
+        tooltip: {
+          callbacks: {
+            label: function(c){
+              var d = c.raw;
+              return d.brand+' '+d.model+' | 调价: '+fmtP(d.x)+' | 销量: '+fmtP(d.y);
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: '调价幅度 (%)', color: '#6b7280' },
+          grid: { color: 'rgba(42,45,58,0.5)' },
+          ticks: { color: '#6b7280', callback: function(v){return fmtP(v);} }
+        },
+        y: {
+          title: { display: true, text: '销量变化 (%)', color: '#6b7280' },
+          grid: { color: 'rgba(42,45,58,0.5)' },
+          ticks: { color: '#6b7280', callback: function(v){return fmtP(v);} },
+          afterBuildTicks: function(axis){ if(axis.ticks.indexOf(0)<0) axis.ticks.push({value:0, label:'0'}); }
+        }
+      }
+    }
+  });
+}
+
+function renderTable(){
+  var rows = filtered;
+
+  // Sort
+  if(currentSort==='impact') rows.sort(function(a,b){ return (b.severity||0)-(a.severity||0); });
+  else if(currentSort==='elastic') rows.sort(function(a,b){ return (b.elasticity||0)-(a.elasticity||0); });
+  else if(currentSort==='price') rows.sort(function(a,b){ return Math.abs(b.price_pct||0)-Math.abs(a.price_pct||0); });
+
+  var html = '<table><thead><tr>';
+  html += '<th>品牌</th><th>型号</th><th>总销量</th><th>日均</th><th>价位</th><th>周转天</th>';
+  html += '<th>调价日期</th><th>变价前</th><th>变价后</th><th>幅度</th>';
+  html += '<th>变价前日均</th><th>变价后日均</th><th>销量变化</th>';
+  html += '<th>弹性</th><th>影响台数</th><th>方向</th>';
+  html += '</tr></thead><tbody>';
+
+  rows.forEach(function(d){
+    var cls = '';
+    if(d.pending) cls = 'sev-2';
+    else cls = severityClass(d.severity);
+
+    html += '<tr class="'+cls+'">';
+    html += '<td><b>'+d.brand+'</b></td>';
+    html += '<td>'+d.model+'</td>';
+    html += '<td>'+fmtN(d.total_qty)+'</td>';
+    html += '<td>'+fmtN(d.daily_avg)+'</td>';
+    html += '<td>'+d.price_tier+'</td>';
+    html += '<td>'+fmtN(d.turnover_days)+'</td>';
+    html += '<td>'+d.ver_date+'</td>';
+    html += '<td>'+fmtPrice(d.from_price)+'</td>';
+    html += '<td>'+fmtPrice(d.to_price)+'</td>';
+    html += '<td><span class="'+(d.direction==='up'?'neg':'pos')+'">'+fmtP(d.price_pct*(d.direction==='up'?1:-1))+'</span></td>';
+    html += '<td>'+fmtN(d.before_avg)+'</td>';
+    html += '<td>'+fmtN(d.after_avg)+'</td>';
+    html += '<td><span class="'+(d.sales_pct!=null&&d.sales_pct>0?'pos':'neg')+'">'+fmtP(d.sales_pct)+'</span></td>';
+    html += '<td>'+fmtN(d.elasticity)+'</td>';
+    html += '<td>'+fmtN(d.severity>0?d.severity:null)+'</td>';
+    html += '<td>';
+    if(d.pending) html += '<span class="badge badge-pending">待观察</span>';
+    else if(d.direction==='up') html += '<span class="badge badge-up">涨价</span>';
+    else html += '<span class="badge badge-down">降价</span>';
+    html += '</td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('tableWrap').innerHTML = html;
+
+  // Info note
+  var cnt = filtered.filter(function(d){return d.pending;}).length;
+  document.getElementById('infoNote').innerHTML = '共 <span>'+filtered.length+'</span> 个调价事件，其中 <span>'+cnt+'</span> 个 06-24 最新调价尚无足够销量数据（标注「待观察」）。';
+}
+
+function applyFilters(){
+  var b = document.getElementById('brandFilter').value;
+  var d = document.getElementById('dirFilter').value;
+  var t = document.getElementById('tierFilter').value;
+  filtered = DATA.filter(function(r){
+    if(b && r.brand!==b) return false;
+    if(d && r.direction!==d) return false;
+    if(t && r.price_tier!==t) return false;
+    return true;
+  });
+  renderTable();
+}
+
+function populateFilters(){
+  var brands = [];
+  var tiers = [];
+  DATA.forEach(function(d){
+    if(brands.indexOf(d.brand)<0) brands.push(d.brand);
+    if(tiers.indexOf(d.price_tier)<0) tiers.push(d.price_tier);
+  });
+  brands.sort();
+  tiers.sort(function(a,b){
+    var o=['10w','20w','30w','100w以上'];
+    return o.indexOf(a)-o.indexOf(b);
+  });
+
+  var bf = document.getElementById('brandFilter');
+  brands.forEach(function(b){ bf.innerHTML += '<option value="'+b+'">'+b+'</option>'; });
+  var tf = document.getElementById('tierFilter');
+  tiers.forEach(function(t){ tf.innerHTML += '<option value="'+t+'">'+t+'</option>'; });
+}
+
+function init(){
+  populateFilters();
+  renderStats();
+  renderChart();
+  renderTable();
+
+  document.getElementById('brandFilter').addEventListener('change', applyFilters);
+  document.getElementById('dirFilter').addEventListener('change', applyFilters);
+  document.getElementById('tierFilter').addEventListener('change', applyFilters);
+
+  document.querySelectorAll('.sort-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      document.querySelectorAll('.sort-btn').forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      currentSort = btn.dataset.sort;
+      renderTable();
+    });
+  });
+}
+
+init();
+</script>
+</body>
+</html>
