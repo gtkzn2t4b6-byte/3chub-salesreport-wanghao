@@ -1,0 +1,18 @@
+# 3CHUB Sales Report Data
+*.json
+
+# Working files
+scripts/__pycache__/
+
+# Root-level cache/scratch files (only deploy/ is the CloudStudio output)
+# GitHub Pages requires root index.html, so keep it tracked
+# /index.html
+/index_base.html
+/price_trends.html
+/store-stockout.html
+
+# Memory
+.workbuddy/memory/
+
+# OS files
+.DS_Store
