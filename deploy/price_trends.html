@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3CHUB Price Trends - Impact Analysis</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#0f172a;color:#f1f5f9;font-size:13px}
+.header{background:#1e293b;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #334155}
+.header h1{font-size:18px}
+.header .meta{color:#94a3b8;font-size:12px}
+.content{padding:20px 24px}
+.summary{display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+.card{background:#1e293b;border-radius:8px;padding:16px 20px;flex:1;min-width:150px}
+.card .val{font-size:24px;font-weight:700}
+.card .lbl{font-size:11px;color:#94a3b8;margin-top:4px;text-transform:uppercase}
+.filters{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.filters select,.filters input{background:#1e293b;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:7px 12px;font-size:12px}
+.filters button{background:#334155;color:#f1f5f9;border:none;border-radius:6px;padding:7px 16px;cursor:pointer;font-size:12px}
+.filters button:hover{background:#475569}
+.chart-wrap{background:#1e293b;border-radius:8px;padding:16px;margin-bottom:20px}
+table{width:100%;border-collapse:collapse;background:#1e293b;border-radius:8px;overflow:hidden}
+th{background:#334155;padding:10px 8px;text-align:left;font-size:11px;color:#94a3b8;text-transform:uppercase;white-space:nowrap;cursor:pointer}
+th:hover{background:#475569}
+td{padding:9px 8px;border-bottom:1px solid #1e293b;font-size:12px}
+tr:hover td{background:#1e3a5f}
+.up{color:#ef4444}
+.down{color:##22c55e}
+.neutral{color:#94a3b8}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.up .dot{background:#ef4444}
+.down .dot{background:#22c55e}
+.highlight{background:#7f1d1d}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>3CHUB Price Change Impact Analysis</h1>
+  <div class="meta">Report: 2026-06-30 | Compare: 2026-05-21 vs 2026-06-29 | Price change period: ~Jun 9-29, 2026</div>
+</div>
+<div class="content">
+  <div class="summary">
+    <div class="card" style="border-left:3px solid #ef4444">
+      <div class="val" style="color:#ef4444" id="cnt-up">0</div>
+      <div class="lbl">Price Increases</div>
+    </div>
+    <div class="card" style="border-left:3px solid #22c55e">
+      <div class="val" style="color:#22c55e" id="cnt-down">0</div>
+      <div class="lbl">Price Decreases</div>
+    </div>
+    <div class="card" style="border-left:3px solid #fbbf24">
+      <div class="val" style="color:#fbbf24" id="cnt-total">0</div>
+      <div class="lbl">Total Changed</div>
+    </div>
+    <div class="card" style="border-left:3px solid #38bdf8">
+      <div class="val" id="avg-severity">0</div>
+      <div class="lbl">Avg Price Change%</div>
+    </div>
+  </div>
+
+  <div class="filters">
+    <select id="f-brand"><option value="">All Brands</option></select>
+    <select id="f-tier"><option value="">All Price Tiers</option></select>
+    <select id="f-dir"><option value="">All Directions</option><option value="up">Price Up</option><option value="down">Price Down</option></select>
+    <input type="text" id="f-search" placeholder="Search model..." oninput="render()">
+    <button onclick="document.getElementById('f-search').value='';['f-brand','f-tier','f-dir'].forEach(id=>document.getElementById(id).value='');render()">Clear</button>
+  </div>
+
+  <div id="stats" style="margin-bottom:12px;font-size:12px;color:#94a3b8"></div>
+
+  <div style="overflow-x:auto">
+  <table id="pt">
+    <thead><tr>
+      <th onclick="sort('brand')">Brand</th>
+      <th onclick="sort('model')">Model</th>
+      <th onclick="sort('price_tier')">Price Tier</th>
+      <th onclick="sort('from_price')">Old Price</th>
+      <th onclick="sort('to_price')">New Price</th>
+      <th onclick="sort('price_pct')">Change%</th>
+      <th onclick="sort('before_avg')">Daily Avg (Before)</th>
+      <th onclick="sort('after_avg')">Daily Avg (After)</th>
+      <th onclick="sort('sales_pct')">Sales Change%</th>
+      <th onclick="sort('elasticity')">Elasticity</th>
+      <th onclick="sort('severity')">Severity</th>
+    </tr></thead>
+    <tbody id="pt-body"></tbody>
+  </table>
+  </div>
+</div>
+<script>
+const DATA = [{"brand": "VIVO", "model": "Y31D(128+6)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "30w", "current_price": 349800, "from_price": 269800, "to_price": 349800, "price_pct": 29.65, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 29.6, "direction": "up"}, {"brand": "VIVO", "model": "Y31D(256+6)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "30w", "current_price": 399800, "from_price": 309800, "to_price": 399800, "price_pct": 29.05, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 29.1, "direction": "up"}, {"brand": "VIVO", "model": "Y31D(256+8)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "40w", "current_price": 459800, "from_price": 359800, "to_price": 459800, "price_pct": 27.79, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 27.8, "direction": "up"}, {"brand": "VIVO", "model": "V60(512+12)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "50w", "current_price": 659800, "from_price": 849800, "to_price": 659800, "price_pct": -22.36, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 22.4, "direction": "down"}, {"brand": "XIAOMI", "model": "REDMI 15(256+8)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "20w", "current_price": 276000, "from_price": 228900, "to_price": 276000, "price_pct": 20.58, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 20.6, "direction": "up"}, {"brand": "VIVO", "model": "V60LITE-5G((256+12)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "40w", "current_price": 454800, "from_price": 569800, "to_price": 454800, "price_pct": -20.18, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 20.2, "direction": "down"}, {"brand": "VIVO", "model": "V60LITE((256+8)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "30w", "current_price": 394800, "from_price": 483800, "to_price": 394800, "price_pct": -18.4, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 18.4, "direction": "down"}, {"brand": "INFINIX", "model": "NOTE50PRO-X6855(256+8)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "40w", "current_price": 406800, "from_price": 346800, "to_price": 406800, "price_pct": 17.3, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 17.3, "direction": "up"}, {"brand": "", "model": "SAMSUNG-GALAXY TAB A11(128+8)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "", "current_price": 268100, "from_price": 229000, "to_price": 268100, "price_pct": 17.07, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 17.1, "direction": "up"}, {"brand": "", "model": "NOTE50PRO PLUS-X6856(256+12", "total_qty": 0, "daily_avg": 0.0, "price_tier": "", "current_price": 721700, "from_price": 621700, "to_price": 721700, "price_pct": 16.08, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 16.1, "direction": "up"}, {"brand": "XIAOMI", "model": "REDMI 15C(256+8)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "20w", "current_price": 225900, "from_price": 196100, "to_price": 225900, "price_pct": 15.2, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 15.2, "direction": "up"}, {"brand": "OPPO", "model": "A6X(64+4)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "10w", "current_price": 189900, "from_price": 219900, "to_price": 189900, "price_pct": -13.64, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 13.6, "direction": "down"}, {"brand": "INFINIX", "model": "NOTE50-X6858(256+8)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "30w", "current_price": 343500, "from_price": 303500, "to_price": 343500, "price_pct": 13.18, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 13.2, "direction": "up"}, {"brand": "XIAOMI", "model": "REDMI 15(128+6)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "20w", "current_price": 228600, "from_price": 202400, "to_price": 228600, "price_pct": 12.94, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 12.9, "direction": "up"}, {"brand": "ITEL", "model": "A200PLUS-A676L(128+3)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "10w", "current_price": 146400, "from_price": 129900, "to_price": 146400, "price_pct": 12.7, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 12.7, "direction": "up"}, {"brand": "OPPO", "model": "A6X(128+4)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "20w", "current_price": 224900, "from_price": 253900, "to_price": 224900, "price_pct": -11.42, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 11.4, "direction": "down"}, {"brand": "ITEL", "model": "A100C-A6611L(64+2)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "10w", "current_price": 105200, "from_price": 95900, "to_price": 105200, "price_pct": 9.7, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 9.7, "direction": "up"}, {"brand": "SAMSUNG", "model": "GALAXY A06-A065F(64+4)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "10w", "current_price": 122600, "from_price": 132600, "to_price": 122600, "price_pct": -7.54, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 7.5, "direction": "down"}, {"brand": "XIAOMI", "model": "REDMI 15C(128+6)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "10w", "current_price": 181100, "from_price": 169500, "to_price": 181100, "price_pct": 6.84, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 6.8, "direction": "up"}, {"brand": "SAMSUNG", "model": "GALAXY A06-A065F(128+4)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "10w", "current_price": 149300, "from_price": 159300, "to_price": 149300, "price_pct": -6.28, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 6.3, "direction": "down"}, {"brand": "XIAOMI", "model": "REDMI-NOTE15(128+6)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "30w", "current_price": 316900, "from_price": 298300, "to_price": 316900, "price_pct": 6.24, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 6.2, "direction": "up"}, {"brand": "TECNO", "model": "SPARK 50-KN4(128+4)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "10w", "current_price": 183700, "from_price": 173200, "to_price": 183700, "price_pct": 6.06, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 6.1, "direction": "up"}, {"brand": "SAMSUNG", "model": "GALAXY A37 5G-A376(128+6)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "40w", "current_price": 474200, "from_price": 504200, "to_price": 474200, "price_pct": -5.95, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 6.0, "direction": "down"}, {"brand": "", "model": "OPPO-A6X(256+4)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "", "current_price": 254900, "from_price": 269900, "to_price": 254900, "price_pct": -5.56, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 5.6, "direction": "down"}, {"brand": "SAMSUNG", "model": "GALAXY A57 5G-A576(128+8)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "50w", "current_price": 588500, "from_price": 623500, "to_price": 588500, "price_pct": -5.61, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 5.6, "direction": "down"}, {"brand": "ITEL", "model": "A100C-A6611L(64+3)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "10w", "current_price": 105200, "from_price": 99900, "to_price": 105200, "price_pct": 5.31, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 5.3, "direction": "up"}, {"brand": "INFINIX", "model": "SMART20-X6840(128+4)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "10w", "current_price": 162900, "from_price": 154800, "to_price": 162900, "price_pct": 5.23, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 5.2, "direction": "up"}, {"brand": "XIAOMI", "model": "REDMI 15C(128+4)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "10w", "current_price": 167900, "from_price": 159800, "to_price": 167900, "price_pct": 5.07, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 5.1, "direction": "up"}, {"brand": "SAMSUNG", "model": "GALAXY A57 5G-A576(256+8)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "50w", "current_price": 663800, "from_price": 698800, "to_price": 663800, "price_pct": -5.01, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 5.0, "direction": "down"}, {"brand": "SAMSUNG", "model": "GALAXY A37 5G-A376(256+8)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "50w", "current_price": 587100, "from_price": 617100, "to_price": 587100, "price_pct": -4.86, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 4.9, "direction": "down"}, {"brand": "XIAOMI", "model": "REDMI-NOTE15PRO(256+8)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "40w", "current_price": 458500, "from_price": 437600, "to_price": 458500, "price_pct": 4.78, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 4.8, "direction": "up"}, {"brand": "XIAOMI", "model": "REDMI-NOTE15(256+8)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "30w", "current_price": 353200, "from_price": 337000, "to_price": 353200, "price_pct": 4.81, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 4.8, "direction": "up"}, {"brand": "ITEL", "model": "CITY 200-C681L(128+4)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "10w", "current_price": 145900, "from_price": 139900, "to_price": 145900, "price_pct": 4.29, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 4.3, "direction": "up"}, {"brand": "", "model": "REDMI-NOTE15PRO PLUS-5G(256+8)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "", "current_price": 657900, "from_price": 645000, "to_price": 657900, "price_pct": 2.0, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 2.0, "direction": "up"}, {"brand": "SAMSUNG", "model": "GALAXY A17-A175F(128+6)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "20w", "current_price": 255500, "from_price": 257500, "to_price": 255500, "price_pct": -0.78, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 0.8, "direction": "down"}, {"brand": "SAMSUNG", "model": "GALAXY A17-A175F(128+4)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "20w", "current_price": 235100, "from_price": 237100, "to_price": 235100, "price_pct": -0.84, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 0.8, "direction": "down"}, {"brand": "SAMSUNG", "model": "GALAXY A17-A175F(256+8)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "30w", "current_price": 345800, "from_price": 347800, "to_price": 345800, "price_pct": -0.58, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 0.6, "direction": "down"}, {"brand": "", "model": "SAMSUNG-GALAXY TAB A11(64+4)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "", "current_price": 192900, "from_price": 193500, "to_price": 192900, "price_pct": -0.31, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 0.3, "direction": "down"}, {"brand": "XIAOMI", "model": "REDMI A7PRO(128+4)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "10w", "current_price": 149900, "from_price": 149400, "to_price": 149900, "price_pct": 0.33, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0.0, "severity": 0.3, "direction": "up"}, {"brand": "VIVO", "model": "Y04(64+4)", "total_qty": 0, "daily_avg": 0.0, "price_tier": "10w", "current_price": 135800, "from_price": 135800, "to_price": 135800, "price_pct": -0.0, "before_avg": 0.0, "after_avg": 0.0, "sales_pct": 0, "elasticity": 0, "severity": 0.0, "direction": "down"}];
+
+let sortKey = 'severity', sortAsc = false;
+
+function naira(v) {
+  if (!v && v !== 0) return '-';
+  return '₦' + Number(v).toLocaleString();
+}
+
+function pct(v) {
+  if (!v && v !== 0) return '-';
+  const sign = v > 0 ? '+' : '';
+  return sign + v + '%';
+}
+
+function getFiltered() {
+  const brand = document.getElementById('f-brand').value;
+  const tier = document.getElementById('f-tier').value;
+  const dir = document.getElementById('f-dir').value;
+  const kw = document.getElementById('f-search').value.toLowerCase();
+  return DATA.filter(r =>
+    (!brand || r.brand === brand) && (!tier || r.price_tier === tier) &&
+    (!dir || r.direction === dir) && (!kw || r.model.toLowerCase().includes(kw) || r.brand.toLowerCase().includes(kw))
+  );
+}
+
+function render() {
+  const rows = getFiltered().sort((a,b) => {
+    const av = a[sortKey], bv = b[sortKey];
+    if (typeof av === 'number') return sortAsc ? av - bv : bv - av;
+    return sortAsc ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
+  });
+  document.getElementById('stats').textContent = `Showing ${rows.length} of ${DATA.length} price-changed models`;
+  document.getElementById('pt-body').innerHTML = rows.map(r => {
+    const dirClass = r.direction === 'up' ? 'up' : 'down';
+    const salesColor = r.sales_pct > 0 ? '#22c55e' : r.sales_pct < 0 ? '#ef4444' : '#94a3b8';
+    const isImpactful = r.direction === 'up' && r.sales_pct < -20;
+    return `<tr style="${isImpactful ? 'background:#450a0a' : ''}">
+      <td>${r.brand}</td>
+      <td>${r.model}</td>
+      <td>${r.price_tier || '-'}</td>
+      <td>${naira(r.from_price)}</td>
+      <td>${naira(r.to_price)}</td>
+      <td class="${dirClass}"><span class="dot"></span>${pct(r.price_pct)}</td>
+      <td>${r.before_avg || '-'}</td>
+      <td>${r.after_avg || '-'}</td>
+      <td style="color:${salesColor}">${pct(r.sales_pct)}</td>
+      <td>${r.elasticity || '-'}</td>
+      <td>${r.severity || '-'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function sort(key) {
+  if (sortKey === key) sortAsc = !sortAsc;
+  else { sortKey = key; sortAsc = false; }
+  render();
+}
+
+// KPI
+const up = DATA.filter(r => r.direction === 'up').length;
+const down = DATA.filter(r => r.direction === 'down').length;
+document.getElementById('cnt-up').textContent = up;
+document.getElementById('cnt-down').textContent = down;
+document.getElementById('cnt-total').textContent = DATA.length;
+const avgPct = DATA.length ? (DATA.reduce((s,r) => s + Math.abs(r.price_pct), 0) / DATA.length).toFixed(1) : 0;
+document.getElementById('avg-severity').textContent = avgPct + '%';
+
+// Populate filters
+const brands = [...new Set(DATA.map(r => r.brand))].sort();
+const tiers = [...new Set(DATA.map(r => r.price_tier).filter(Boolean))].sort();
+brands.forEach(b => { const o = document.createElement('option'); o.value=b; o.textContent=b; document.getElementById('f-brand').appendChild(o); });
+tiers.forEach(t => { const o = document.createElement('option'); o.value=t; o.textContent=t; document.getElementById('f-tier').appendChild(o); });
+
+render();
+</script>
+</body>
+</html>
