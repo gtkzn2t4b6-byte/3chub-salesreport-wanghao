@@ -13912,9 +13912,9 @@ var _dm = (function(){
         _monChart = new Chart(document.getElementById('dm_chart_mon'), {
             type: 'bar',
             data: { labels: bs.map(function(b){ return b.brand; }), datasets: [
-                { label: '本月', data: curVals, backgroundColor: '#64748b',
+                { label: '本月', data: curVals, backgroundColor: '#3b82f6',
                   borderRadius: 4, barPercentage: .62, categoryPercentage: .72,
-                  datalabels: { clip: false, anchor: 'end', align: 'top', color: '#475569', font: { size: 9, weight: '600' },
+                  datalabels: { clip: false, anchor: 'end', align: 'top', color: '#2563eb', font: { size: 9, weight: '600' },
                     formatter: function(v){ return fmtI(v); } } },
                 { label: '上月同期(' + mon.prev_label.split('·')[1].trim() + ')', data: prevVals,
                   backgroundColor: '#64748b', borderRadius: 4, barPercentage: .62, categoryPercentage: .72,
