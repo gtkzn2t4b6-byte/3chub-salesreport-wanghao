@@ -2563,8 +2563,8 @@ else:
 dm_css = """
 /* ===== 日销售情况 / 月度完成情况 (柔和浅色系) ===== */
 .dm-hero{display:grid;grid-template-columns:1.05fr 1.5fr .85fr;gap:18px;align-items:center;border-radius:12px;padding:16px 20px;margin-bottom:14px;border:1px solid transparent}
-.dm-hero-day{background:linear-gradient(135deg,#fff5f6 0%,#ffe9ec 55%,#ffecef 100%);border-color:#fecdde;color:#881337}
-.dm-hero-mon{background:linear-gradient(135deg,#f5f6ff 0%,#eceefe 55%,#efeafe 100%);border-color:#ddd6fe;color:#312e81}
+.dm-hero-day{background:linear-gradient(135deg,#f8fafc 0%,#eef2f7 55%,#e9eef5 100%);border-color:#dbe2ea;color:#334155}
+.dm-hero-mon{background:linear-gradient(135deg,#f8fafc 0%,#eef2f7 55%,#e9eef5 100%);border-color:#dbe2ea;color:#334155}
 .dm-hero-label{font-size:12px;opacity:.78;margin-bottom:6px;font-weight:500;line-height:1.5}
 .dm-hero-row{display:flex;align-items:baseline;gap:14px;margin-bottom:10px;flex-wrap:wrap}
 .dm-big{font-size:30px;font-weight:800;line-height:1.05;letter-spacing:-.5px}
@@ -2573,17 +2573,17 @@ dm_css = """
 .dm-divider{width:1px;height:34px;background:rgba(15,23,42,.14);align-self:center}
 .dm-chips{display:flex;flex-wrap:wrap;gap:6px}
 .dm-chip{border-radius:8px;padding:3px 9px;font-size:11px;display:inline-flex;gap:5px;align-items:center;white-space:nowrap;font-weight:500}
-.dm-hero-day .dm-chip{background:rgba(225,29,72,.07);color:#9f1239}
-.dm-hero-mon .dm-chip{background:rgba(79,70,229,.08);color:#3730a3}
+.dm-hero-day .dm-chip{background:rgba(100,116,139,.12);color:#475569}
+.dm-hero-mon .dm-chip{background:rgba(100,116,139,.12);color:#475569}
 .dm-chip b{font-size:12px;font-weight:700}
 .dm-hero-table-wrap{overflow-x:auto;min-width:0}
 .dm-hero-table{width:100%;border-collapse:collapse;font-size:11.5px}
 .dm-hero-table th{font-weight:500;opacity:.75;padding:4px 6px;text-align:right;white-space:nowrap}
 .dm-hero-table td{padding:4.5px 6px;text-align:right;white-space:nowrap}
-.dm-hero-day .dm-hero-table th{border-bottom:1px solid rgba(136,19,55,.22)}
-.dm-hero-day .dm-hero-table td{border-bottom:1px solid rgba(136,19,55,.1)}
-.dm-hero-mon .dm-hero-table th{border-bottom:1px solid rgba(49,46,129,.22)}
-.dm-hero-mon .dm-hero-table td{border-bottom:1px solid rgba(49,46,129,.1)}
+.dm-hero-day .dm-hero-table th{border-bottom:1px solid rgba(100,116,139,.22)}
+.dm-hero-day .dm-hero-table td{border-bottom:1px solid rgba(100,116,139,.1)}
+.dm-hero-mon .dm-hero-table th{border-bottom:1px solid rgba(100,116,139,.22)}
+.dm-hero-mon .dm-hero-table td{border-bottom:1px solid rgba(100,116,139,.1)}
 .dm-hero-table tr:last-child td{border-bottom:none;font-weight:700}
 .dm-hero-table th:first-child,.dm-hero-table td:first-child{text-align:left}
 .dm-gauges{display:flex;gap:8px;justify-content:center}
@@ -2949,12 +2949,12 @@ var _dm = (function(){
                   borderRadius: 3, barPercentage: .7, categoryPercentage: .8, datalabels: { display: false } },
                 { label: '功能机', data: feats, backgroundColor: '#f59e0b59', stack: 's',
                   borderRadius: 3, barPercentage: .7, categoryPercentage: .8, datalabels: { display: false } },
-                { label: '平板', data: tabs, backgroundColor: '#8b5cf659', stack: 's',
+                { label: '平板', data: tabs, backgroundColor: '#94a3b859', stack: 's',
                   borderRadius: 3, barPercentage: .7, categoryPercentage: .8, datalabels: { display: false } },
                 { label: '7日均线', type: 'line', data: dma, stack: 'l1', borderColor: '#64748b',
                   borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, tension: .35, datalabels: { display: false } },
                 { label: '目标日均 ' + fmtI(need), type: 'line', data: days.map(function(){ return need; }), stack: 'l2',
-                  borderColor: '#e11d48', borderDash: [2, 3], borderWidth: 1.2, pointRadius: 0, datalabels: { display: false } },
+                  borderColor: '#475569', borderDash: [2, 3], borderWidth: 1.2, pointRadius: 0, datalabels: { display: false } },
                 { label: '总量', type: 'line', data: totals, stack: 'lbl', borderColor: 'transparent', pointRadius: 0,
                   datalabels: { display: true, clip: false, anchor: 'end', align: 'top', offset: 1, color: '#475569',
                     font: { size: 9, weight: '600' }, formatter: function(v){ return fmtI(v); } } }
@@ -3044,7 +3044,7 @@ var _dm = (function(){
         } catch(e){}
         if (tRate === null){ tRate = meta.total_target > 0 ? meta.total_smart_qty / meta.total_target * 100 : 0; tSub = '目标 ' + fmtI(meta.total_target) + ' 台'; }
         if (rRate === null){ rRate = meta.time_progress_pct || 0; rSub = '时间进度'; }
-        makeGauge('dm_gauge_trans', tRate, '#6366f1', pct(tRate, 1), tSub);
+        makeGauge('dm_gauge_trans', tRate, '#64748b', pct(tRate, 1), tSub);
         makeGauge('dm_gauge_rev', rRate, '#f59e0b', pct(rRate, 1), rSub);
     }
 
@@ -3059,9 +3059,9 @@ var _dm = (function(){
         _monChart = new Chart(document.getElementById('dm_chart_mon'), {
             type: 'bar',
             data: { labels: bs.map(function(b){ return b.brand; }), datasets: [
-                { label: '本月', data: curVals, backgroundColor: '#6366f1',
+                { label: '本月', data: curVals, backgroundColor: '#64748b',
                   borderRadius: 4, barPercentage: .62, categoryPercentage: .72,
-                  datalabels: { clip: false, anchor: 'end', align: 'top', color: '#4f46e5', font: { size: 9, weight: '600' },
+                  datalabels: { clip: false, anchor: 'end', align: 'top', color: '#475569', font: { size: 9, weight: '600' },
                     formatter: function(v){ return fmtI(v); } } },
                 { label: '上月同期(' + mon.prev_label.split('·')[1].trim() + ')', data: prevVals,
                   backgroundColor: '#94a3b8', borderRadius: 4, barPercentage: .62, categoryPercentage: .72,
@@ -3090,7 +3090,7 @@ var _dm = (function(){
             return '<option value="' + d.date + '">' + _md(d.date) + ' ' + _wd(d.date) + '</option>';
         }).join('');
         makeGauge('dm_gauge_time', meta.time_progress_pct || 0, '#f59e0b', pct(meta.time_progress_pct, 1), '已过 ' + (meta.elapsed_days || 0) + '/' + (meta.total_biz_days || 0) + ' 天');
-        _gTsmart = makeGauge('dm_gauge_tsmart', 0, '#f43f5e', '—', '');
+        _gTsmart = makeGauge('dm_gauge_tsmart', 0, '#475569', '—', '');
         initDayChart();
         renderDay();
         renderMonth();
@@ -3153,21 +3153,21 @@ def overview_dm_section():
               f'{"▲" if up_day >= up_prev else "▼"}{abs(up_day / up_prev - 1) * 100:.1f}%</i>'
               if up_prev else '<i style="color:#94a3b8;font-size:10.5px;font-style:normal">新增</i>')
     day_items = [
-        ('销售额', f'{_naira(dt["revenue"])} <span style="font-weight:600;color:#9f1239">{fmt_rmb(dt["revenue"])}</span>'),
-        ('总毛利', f'{_naira(dt["profit"])} <span style="font-weight:600;color:#9f1239">{fmt_rmb(dt["profit"])}</span>'),
+        ('销售额', f'{_naira(dt["revenue"])} <span style="font-weight:600;color:#475569">{fmt_rmb(dt["revenue"])}</span>'),
+        ('总毛利', f'{_naira(dt["profit"])} <span style="font-weight:600;color:#475569">{fmt_rmb(dt["profit"])}</span>'),
         ('毛利率', f'{m_day:.2f}% {m_pp}'),
         ('单机毛利', f'₦{up_day:,.0f} {up_pct}'),
     ]
     day_card = f'''
-        <div style="background:linear-gradient(135deg,#fff5f6,#ffecef);border:1px solid #fecdde;border-radius:10px;padding:14px 16px;color:#881337">
+        <div style="background:linear-gradient(135deg,#f8fafc,#eef2f7);border:1px solid #dbe2ea;border-radius:10px;padding:14px 16px;color:#334155">
             <div style="font-size:12px;opacity:.8;margin-bottom:6px">最近营业日 · {_md(cur["date"])} {_wd(cur["date"])}</div>
             <div style="display:flex;gap:14px;align-items:baseline;flex-wrap:wrap">
                 <span style="font-size:26px;font-weight:800;letter-spacing:-.5px">{dt["qty"]:,}</span>
                 <span style="font-size:11px;opacity:.75">件</span>
                 <span style="font-size:19px;font-weight:800">{_naira(dt["revenue"])}</span>
-                <span style="font-size:11.5px;font-weight:700;color:#9f1239">{fmt_rmb(dt["revenue"])}</span>
+                <span style="font-size:11.5px;font-weight:700;color:#475569">{fmt_rmb(dt["revenue"])}</span>
             </div>
-            {_kv_rows(day_items, '#881337')}
+            {_kv_rows(day_items, '#475569')}
         </div>'''
 
     # --- 月卡 ---
@@ -3179,21 +3179,21 @@ def overview_dm_section():
                 f'{"▲" if mom >= 0 else "▼"}{abs(mom):.1f}%</i>' if mom is not None else '')
     pl = (mon.get('prev_label') or '').split('·')[-1].strip()
     mon_items = [
-        ('销售额', f'{_naira(mt["revenue"])} <span style="font-weight:600;color:#3730a3">{fmt_rmb(mt["revenue"])}</span>'),
-        ('总毛利', f'{_naira(mt["profit"])} <span style="font-weight:600;color:#3730a3">{fmt_rmb(mt["profit"])}</span>'),
+        ('销售额', f'{_naira(mt["revenue"])} <span style="font-weight:600;color:#475569">{fmt_rmb(mt["revenue"])}</span>'),
+        ('总毛利', f'{_naira(mt["profit"])} <span style="font-weight:600;color:#475569">{fmt_rmb(mt["profit"])}</span>'),
         ('毛利率', f'{m_mon:.2f}%'),
         ('单机毛利', f'₦{up_mon:,.0f} <span style="font-size:10.5px;opacity:.75">销量环比 {mom_html}</span>'),
     ]
     mon_card = f'''
-        <div style="background:linear-gradient(135deg,#f5f6ff,#efeafe);border:1px solid #ddd6fe;border-radius:10px;padding:14px 16px;color:#312e81">
+        <div style="background:linear-gradient(135deg,#f8fafc,#eef2f7);border:1px solid #dbe2ea;border-radius:10px;padding:14px 16px;color:#334155">
             <div style="font-size:12px;opacity:.8;margin-bottom:6px">本月累计 · 09/01 → {_md(M["report_date"])}<span style="opacity:.75"> · 环比 {pl}</span></div>
             <div style="display:flex;gap:14px;align-items:baseline;flex-wrap:wrap">
                 <span style="font-size:26px;font-weight:800;letter-spacing:-.5px">{mt["qty"]:,}</span>
                 <span style="font-size:11px;opacity:.75">件</span>
                 <span style="font-size:19px;font-weight:800">{_naira(mt["revenue"])}</span>
-                <span style="font-size:11.5px;font-weight:700;color:#3730a3">{fmt_rmb(mt["revenue"])}</span>
+                <span style="font-size:11.5px;font-weight:700;color:#475569">{fmt_rmb(mt["revenue"])}</span>
             </div>
-            {_kv_rows(mon_items, '#312e81')}
+            {_kv_rows(mon_items, '#475569')}
         </div>'''
 
     # --- 完成率进度条 (KPI 月度: 传音智能机 + 销售额) ---
@@ -3223,7 +3223,7 @@ def overview_dm_section():
                 </div>'''
 
         if tq and aq is not None:
-            bars += _bar('传音智能机完成率', aq / tq * 100, f'{aq:,.0f} / {tq:,.0f} 台 · 月度目标', '#818cf8', '#6366f1', '#4f46e5')
+            bars += _bar('传音智能机完成率', aq / tq * 100, f'{aq:,.0f} / {tq:,.0f} 台 · 月度目标', '#94a3b8', '#64748b', '#475569')
         if rq and ra is not None:
             bars += _bar('销售额完成率(月)', ra / rq * 100, f'¥{ra/1e4:,.0f}万 / ¥{rq/1e4:,.0f}万 · 月度目标', '#fbbf24', '#f59e0b', '#b45309')
     except Exception:
