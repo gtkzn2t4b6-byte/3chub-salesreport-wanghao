@@ -3682,9 +3682,9 @@ tr:hover {{ background:rgba(255,255,255,0.05) !important; }}
 
 <!-- 模块导航栏: 按主题分组, 一次只展开一组, 缩短单页长度 (按钮顺序与内容顺序一致: 总览→门店任务→驾驶舱) -->
 <div class="mod-nav" id="mod-nav">
-    <button class="mod-nav-btn" data-g="overview" onclick="switchModGroup('overview',this)">📊 总览速览</button>
+    <button class="mod-nav-btn active" data-g="overview" onclick="switchModGroup('overview',this)">📊 总览速览</button>
     <button class="mod-nav-btn" data-g="task" onclick="switchModGroup('task',this)">🎯 门店任务</button>
-    <button class="mod-nav-btn active" data-g="cockpit" onclick="switchModGroup('cockpit',this)">🎯 经营驾驶舱</button>
+    <button class="mod-nav-btn" data-g="cockpit" onclick="switchModGroup('cockpit',this)">🎯 经营驾驶舱</button>
     <button class="mod-nav-btn" data-g="store" onclick="switchModGroup('store',this)">🏪 门店明细</button>
     <button class="mod-nav-btn" data-g="model" onclick="switchModGroup('model',this)">📱 型号分析</button>
     <button class="mod-nav-btn" data-g="stock" onclick="switchModGroup('stock',this)">📦 库存周转</button>
@@ -4696,7 +4696,7 @@ function switchView(view) {{
             setTimeout(() => {{
                 try {{ initAnalysisCharts(); }} catch(e) {{ console.warn('图表初始化失败(不影响表格内容):', e); }}
                 window._analysisChartsInit = true;
-                switchModGroup(window._modGroup || 'cockpit', null);
+                switchModGroup(window._modGroup || 'overview', null);
             }}, 50);
         }} else {{
             setTimeout(() => {{
