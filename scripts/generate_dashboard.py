@@ -4,6 +4,8 @@ import argparse
 import datetime
 import json
 import os
+import re
+import pandas as pd
 
 parser = argparse.ArgumentParser(description='Generate sales dashboard HTML')
 parser.add_argument('--data', required=True, help='Path to dashboard_full.json')
@@ -1668,16 +1670,87 @@ if H:
     rev_data_js = json.dumps(rev_data)
     profit_data_js = json.dumps(profit_data)
 
+    # ===== 月度目标 (各月 TARGET 手机任务合计, 2025+2026) =====
+    # 从 ~/Desktop/销售部/增量基数/{year}年/{year}-M TARGET.xlsx 的「手机」sheet 读门店任务之和
+    _target_dir = os.path.expanduser('~/Desktop/销售部/增量基数')
+    _monthly_target = {}
+    for _y in ('2025', '2026'):
+        _ydir = os.path.join(_target_dir, f'{_y}年')
+        if not os.path.isdir(_ydir):
+            continue
+        for _fn in sorted(os.listdir(_ydir)):
+            if not _fn.lower().endswith('.xlsx'):
+                continue
+            _base = _fn[:-5]
+            if not re.match(rf'^{_y}-\d{{1,2}}\s*(?:TARGET|target)$', _base):
+                continue
+            _mm = re.search(rf'^{_y}-(\d{{1,2}})', _base)
+            if not _mm:
+                continue
+            _ym = f'{_y}-{int(_mm.group(1)):02d}'
+            _fp = os.path.join(_ydir, _fn)
+            try:
+                _t = pd.read_excel(_fp, sheet_name='手机')
+                _col = '门店' if '门店' in _t.columns else _t.columns[0]
+                _tcol = '任务' if '任务' in _t.columns else _t.columns[-1]
+                _mask = _t[_col].astype(str) != '合计'
+                _monthly_target[_ym] = float(pd.to_numeric(_t[_mask][_tcol], errors='coerce').sum())
+            except Exception:
+                _monthly_target[_ym] = None
+    # 目标覆盖不到的历史月份(2023/2024)置空
+    _target_months_sorted = sorted(_monthly_target.keys())
+    print(f"[History] monthly targets loaded: {len(_monthly_target)} months ({_target_months_sorted[0] if _target_months_sorted else '-'} → {_target_months_sorted[-1] if _target_months_sorted else '-'})")
+
     # Raw monthly data for JS-side month filter & YoY/MoM analysis
     hist_data_js = json.dumps({
         'months': sorted_months,
         'brand': hbrand,
         'rev': {m: rev_monthly.get(m, 0) for m in sorted_months},
         'profit': {m: profit_monthly.get(m, 0) for m in sorted_months},
-        'sales': {m: (mt.get(m, 0) or 0) for m in sorted_months}
+        'sales': {m: (mt.get(m, 0) or 0) for m in sorted_months},
+        'target': {m: _monthly_target.get(m) for m in sorted_months}
     })
 
     print(f"[History] {total_stores_h} stores, {len(sorted_months)} months loaded")
+
+    # ===== 月度完成情况数据 (Python 静态表格) =====
+    # 仅统计有目标且 2025-01 起的月份; 实际销量 = 历史月度 + 当月(进行中)补入 meta.total_smart_qty
+    _cur_ym = f"2026-{int(M.get('current_month', 9)):02d}"
+    _completion_sales = {m: (mt.get(m, 0) or 0) for m in sorted_months}
+    if _cur_ym not in _completion_sales and _monthly_target.get(_cur_ym) is not None:
+        _completion_sales[_cur_ym] = float(M.get('total_smart_qty', 0) or 0)
+    _completion_rows = []
+    _completion_months = sorted([m for m in _completion_sales if _monthly_target.get(m) is not None and m >= '2025-01'])
+    for _m in _completion_months:
+        _tgt = _monthly_target[_m]
+        _act = _completion_sales.get(_m, 0) or 0
+        _rate = (_act / _tgt * 100) if _tgt else None
+        _prev = _completion_months[_completion_months.index(_m) - 1] if _completion_months.index(_m) > 0 else None
+        _prev_act = _completion_sales.get(_prev, 0) if _prev else None
+        _mom = ((_act - _prev_act) / _prev_act * 100) if _prev_act else None
+        _completion_rows.append((_m, _tgt, _act, _rate, _mom))
+
+    # 完成率图表数据 (JS): 目标 / 实际 / 完成率
+    _completion_labels_js = json.dumps([f'{int(m[:4]) % 100:02d}/{int(m[5:7]):02d}' for m in _completion_months])
+    _completion_target_js = json.dumps([(_monthly_target.get(m) or 0) for m in _completion_months])
+    _completion_actual_js = json.dumps([(_completion_sales.get(m, 0) or 0) for m in _completion_months])
+    _completion_rate_js = json.dumps([round((_completion_sales.get(m, 0) or 0) / _monthly_target[m] * 100, 1) if _monthly_target.get(m) else None for m in _completion_months])
+
+    def _completion_table_rows():
+        _r = []
+        for (_m, _tgt, _act, _rate, _mom) in _completion_rows:
+            _y = int(_m.split('-')[0]); _mm = int(_m.split('-')[1])
+            _is_partial = (_y == 2026 and _mm == int(M.get('current_month', 9)))
+            _rate_html = f'<span style="font-weight:700;color:{"#16a34a" if (_rate or 0) >= 100 else ("#f59e0b" if (_rate or 0) >= 80 else "#dc2626")}">{_rate:.1f}%</span>' if _rate is not None else '—'
+            _mom_html = ''
+            if _mom is not None:
+                _c = '#dc2626' if _mom >= 0 else '#16a34a'
+                _arrow = '▲' if _mom >= 0 else '▼'
+                _mom_html = f'<span style="color:{_c};font-size:11px">{_arrow}{abs(_mom):.1f}%</span>'
+            _partial_tag = ' <span style="font-size:10px;color:#f59e0b">(进行中)</span>' if _is_partial else ''
+            _r.append(f'<tr><td style="text-align:left;font-weight:600">{_y}年{_mm}月{_partial_tag}</td><td>{_tgt:,.0f}</td><td>{_act:,.0f}</td><td>{_rate_html}</td><td>{_mom_html}</td></tr>')
+        return '\n'.join(_r)
+    _completion_table_html = _completion_table_rows()
 
     # 2026-only data for default view
     months_2026 = [m for m in sorted_months if m.startswith('2026-')]
@@ -1851,6 +1924,24 @@ if H:
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
             <div><h4 style="margin:0 0 8px;font-size:13px;color:var(--text2)">月度销售额 & 毛利 (百万₦)</h4><div style="height:320px"><canvas id="chart_history_rev_profit"></canvas></div></div>
             <div><h4 style="margin:0 0 8px;font-size:13px;color:var(--text2)">品牌贡献 TOP8 <span id="brand_contrib_scope" style="font-weight:400">（2026累计）</span></h4><div style="height:320px"><canvas id="chart_history_brand_contrib"></canvas></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- Monthly Completion (目标 vs 实际 vs 完成率) -->
+<div class="section">
+    <div class="section-header">
+        <div class="section-title">✅ 月度完成情况</div>
+        <span style="font-size:11px;color:var(--text2);margin-left:auto">手机任务目标 vs 智能机+平板实际销量 · 2025-2026</span>
+    </div>
+    <div class="section-body">
+        <div style="height:340px;margin-bottom:16px"><canvas id="chart_history_completion"></canvas></div>
+        <div class="tbl-wrap" style="max-height:420px">
+            <table id="tbl_history_completion"><thead><tr>
+                <th style="text-align:left">月份</th><th>目标(台)</th><th>实际(台)</th><th>完成率</th><th>销量环比</th>
+            </tr></thead><tbody>
+""" + _completion_table_html + """
+            </tbody></table>
         </div>
     </div>
 </div>
@@ -2086,6 +2177,46 @@ function initHistoryCharts() {{
             }}
         }}
     }});
+    // Chart 5: 月度完成情况 (目标 vs 实际 柱状 + 完成率 折线)
+    var _completionCanvas = document.getElementById('chart_history_completion');
+    if (_completionCanvas) {{
+        new Chart(_completionCanvas, {{
+            data: {{
+                labels: {_completion_labels_js},
+                datasets: [
+                    {{
+                        type: 'bar', label: '目标(台)', data: {_completion_target_js},
+                        backgroundColor: 'rgba(100,116,139,0.28)', borderRadius: 4,
+                        borderColor: 'rgba(100,116,139,0.5)', borderWidth: 1, yAxisID: 'y',
+                        barPercentage: .6, categoryPercentage: .7
+                    }},
+                    {{
+                        type: 'bar', label: '实际(台)', data: {_completion_actual_js},
+                        backgroundColor: 'rgba(59,130,246,0.75)', borderRadius: 4, yAxisID: 'y',
+                        barPercentage: .6, categoryPercentage: .7
+                    }},
+                    {{
+                        type: 'line', label: '完成率(%)', data: {_completion_rate_js},
+                        borderColor: '#f59e0b', backgroundColor: '#f59e0b', yAxisID: 'y1',
+                        borderWidth: 2, pointRadius: 4, pointHoverRadius: 6, tension: .3,
+                        datalabels: {{ display: false }}
+                    }}
+                ]
+            }},
+            options: {{
+                responsive: true, maintainAspectRatio: false,
+                plugins: {{
+                    legend: {{ position: 'bottom', labels: {{ color: '#94a3b8', usePointStyle: true, boxWidth: 8, font: {{ size: 10 }} }} }},
+                    tooltip: {{ callbacks: {{ label: ctx => ctx.dataset.label + ': ' + (ctx.dataset.yAxisID === 'y1' ? ctx.parsed.y.toFixed(1) + '%' : ctx.parsed.y.toLocaleString() + ' 台') }} }}
+                }},
+                scales: {{
+                    y: {{ type: 'linear', position: 'left', beginAtZero: true, grid: {{ color: 'rgba(51,65,85,0.3)' }}, ticks: {{ color: '#94a3b8' }}, title: {{ display: true, text: '台数', color: '#94a3b8', font: {{ size: 10 }} }} }},
+                    y1: {{ type: 'linear', position: 'right', beginAtZero: true, min: 0, max: 120, grid: {{ display: false }}, ticks: {{ color: '#f59e0b', callback: v => v + '%' }}, title: {{ display: true, text: '完成率', color: '#f59e0b', font: {{ size: 10 }} }} }},
+                    x: {{ grid: {{ display: false }}, ticks: {{ color: '#94a3b8', maxRotation: 45, font: {{ size: 10 }} }} }}
+                }}
+            }}
+        }});
+    }}
     _initHistFilters();
 }}
 
