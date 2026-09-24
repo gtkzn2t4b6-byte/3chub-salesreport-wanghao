@@ -2459,9 +2459,10 @@ function _pctTxt(v) {
     return (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
 }
 function _fmtM(v) { return '₦' + (v / 1e6).toLocaleString(undefined, { maximumFractionDigits: 1 }) + 'M'; }
-function _fmtRmb(v) {
+function _fmtRmb(v, m) {
     if (v === null || v === undefined || !isFinite(v)) return '—';
-    var cny = v * (1 / 205);
+    var ngnPerCny = (m && HIST.rates && HIST.rates[m]) ? HIST.rates[m] : 205;
+    var cny = v / ngnPerCny;
     if (Math.abs(cny) >= 1e8) return '¥' + (cny / 1e8).toFixed(2) + '亿';
     if (Math.abs(cny) >= 1e4) return '¥' + (cny / 1e4).toFixed(1) + '万';
     if (Math.abs(cny) >= 1e3) return '¥' + (cny / 1e3).toFixed(1) + '千';
