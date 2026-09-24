@@ -1632,32 +1632,48 @@ if H:
         n = fmt_naira(ngn)
         return f'{n} <span style="color:#94a3b8;font-weight:400">{_amt_cny(ngn)}</span>'
 
-    # 纯人民币金额 (需求: 明细/趋势/同比环比 统一人民币)
-    def _rmb(ngn):
-        cny = ngn * NGN_CNY_RATE
+    # ===== 逐月汇率 (2026-09-24 用户提供 2024/2025 历史实际汇率; 2026 沿用 1元≈205奈拉) =====
+    # exchange_rates.json: NGN_PER_CNY = 1元人民币兑X奈拉 → 奈拉→人民币 = 金额 ÷ 该值
+    _NGN_PER_CNY = {}
+    try:
+        with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'exchange_rates.json')) as _rf:
+            _NGN_PER_CNY = json.load(_rf).get('NGN_PER_CNY', {})
+    except Exception as _e:
+        print(f'[History] exchange_rates.json load failed: {_e}, fallback to fixed rate')
+    def _rate_for(m):
+        # m='YYYY-MM' → 奈拉→人民币系数; 未收录月份回退固定汇率 NGN_CNY_RATE
+        _ngn = _NGN_PER_CNY.get(m)
+        return (1.0 / _ngn) if _ngn else NGN_CNY_RATE
+
+    # 纯人民币金额 (需求: 明细/趋势/同比环比 统一人民币; m='YYYY-MM' 时按当月实际汇率)
+    def _fmt_cny(cny):
+        # 输入已是人民币金额, 仅格式化(不做汇率换算)
         if abs(cny) >= 1e8: return f'¥{cny/1e8:.2f}亿'
         if abs(cny) >= 1e4: return f'¥{cny/1e4:.1f}万'
         if abs(cny) >= 1e3: return f'¥{cny/1e3:.1f}千'
         return f'¥{cny:,.0f}'
+    def _rmb(ngn, m=None):
+        return _fmt_cny(ngn * (_rate_for(m) if m else NGN_CNY_RATE))
 
-    # ===== 每月销售明细 (公司智能机零售销量): 每月 销量/营收/利润/客单价/单机利润/毛利率, 降序, 金额人民币 =====
+    # ===== 每月销售明细 (公司智能机零售销量): 每月 销量/营收/利润/客单价/单机利润/毛利率, 降序, 金额人民币(按各月实际汇率) =====
     def _monthly_detail_rows():
         _out = []
         _prev_year = None
-        _year_q = _year_r = _year_p = 0
+        _year_q = 0
+        _year_r_cny = _year_p_cny = 0.0   # 年合计人民币 = 逐月按当月汇率换算后求和
         def _flush_year():
-            nonlocal _prev_year, _year_q, _year_r, _year_p
+            nonlocal _prev_year, _year_q, _year_r_cny, _year_p_cny
             if _prev_year is None:
                 return ''
-            _gm_y = (_year_p / _year_r * 100) if _year_r else 0
+            _gm_y = (_year_p_cny / _year_r_cny * 100) if _year_r_cny else 0
             _gm_y_c = '#16a34a' if _gm_y >= 10 else ('#f59e0b' if _gm_y >= 5 else '#dc2626')
             return (f'<tr style="font-weight:700;background:var(--surface2);border-top:2px solid var(--border)">'
                     f'<td style="text-align:left">{_prev_year}年合计</td>'
                     f'<td style="text-align:right">{_year_q:,.0f}</td>'
-                    f'<td style="text-align:right">{_rmb(_year_r)}</td>'
-                    f'<td style="text-align:right">{_rmb(_year_p)}</td>'
-                    f'<td style="text-align:right">{_rmb(_year_r / _year_q if _year_q else 0)}</td>'
-                    f'<td style="text-align:right">{_rmb(_year_p / _year_q if _year_q else 0)}</td>'
+                    f'<td style="text-align:right">{_fmt_cny(_year_r_cny)}</td>'
+                    f'<td style="text-align:right">{_fmt_cny(_year_p_cny)}</td>'
+                    f'<td style="text-align:right">{_fmt_cny(_year_r_cny / _year_q if _year_q else 0)}</td>'
+                    f'<td style="text-align:right">{_fmt_cny(_year_p_cny / _year_q if _year_q else 0)}</td>'
                     f'<td style="text-align:right;color:{_gm_y_c}">{_gm_y:.1f}%</td></tr>')
         for m in reversed(sorted_months):
             _y = int(m.split('-')[0]); _mm = int(m.split('-')[1])
@@ -1671,16 +1687,19 @@ if H:
             # 年份切换时先输出上一年的合计行
             if _prev_year is not None and _y != _prev_year:
                 _out.append(_flush_year())
-                _year_q = _year_r = _year_p = 0
+                _year_q = 0
+                _year_r_cny = _year_p_cny = 0.0
             _prev_year = _y
-            _year_q += _q; _year_r += _r; _year_p += _p
+            _year_q += _q
+            _year_r_cny += _r * _rate_for(m)
+            _year_p_cny += _p * _rate_for(m)
             _out.append(
                 f'<tr><td style="text-align:left;font-weight:600">{_y}年{_mm}月</td>'
                 f'<td style="text-align:right">{_q:,.0f}</td>'
-                f'<td style="text-align:right">{_rmb(_r)}</td>'
-                f'<td style="text-align:right">{_rmb(_p)}</td>'
-                f'<td style="text-align:right">{_rmb(_atv)}</td>'
-                f'<td style="text-align:right">{_rmb(_up)}</td>'
+                f'<td style="text-align:right">{_rmb(_r, m)}</td>'
+                f'<td style="text-align:right">{_rmb(_p, m)}</td>'
+                f'<td style="text-align:right">{_rmb(_atv, m)}</td>'
+                f'<td style="text-align:right">{_rmb(_up, m)}</td>'
                 f'<td style="text-align:right;color:{_gm_c};font-weight:600">{_gm:.1f}%</td></tr>'
             )
         _out.append(_flush_year())
@@ -1758,8 +1777,8 @@ if H:
     for _b in all_brands:
         _br = _brand_rev_26.get(_b, {})
         _bp = _brand_profit_26.get(_b, {})
-        _brand_rev_cny[_b] = [round((_br.get(m, 0) or 0) * NGN_CNY_RATE / 1e4, 2) for m in months_2026_only]
-        _brand_profit_cny[_b] = [round((_bp.get(m, 0) or 0) * NGN_CNY_RATE / 1e4, 2) for m in months_2026_only]
+        _brand_rev_cny[_b] = [round((_br.get(m, 0) or 0) * _rate_for(m) / 1e4, 2) for m in months_2026_only]
+        _brand_profit_cny[_b] = [round((_bp.get(m, 0) or 0) * _rate_for(m) / 1e4, 2) for m in months_2026_only]
     _brand_trend_brands = all_brands[:8]
     _brand_trend_brands_js = json.dumps(_brand_trend_brands)
     _brand_rev_cny_js = json.dumps(_brand_rev_cny)
@@ -1857,6 +1876,7 @@ if H:
         'cat_month': _cat_month_map,        # 品类×2026月 销量
         'cat_mom': _cat_mom,                # 品类×2026月 环比
         'cat_names': _cat_names,            # 品类白名单顺序
+        'rates': {m: round(1.0 / _rate_for(m), 4) for m in sorted_months},  # 各月 1元=X奈拉 (JS 人民币换算用)
     })
 
     print(f"[History] {total_stores_h} stores, {len(sorted_months)} months loaded")
@@ -2035,7 +2055,7 @@ if H:
             </tr></thead><tbody>
 """ + _monthly_detail_html + """
             </tbody></table>
-            <div style="font-size:11px;color:var(--text2);margin-top:6px">金额统一人民币(¥)，1元≈205奈拉 · 客单价 = 营收 ÷ 销量 · 单机利润 = 毛利 ÷ 销量 · 毛利率 = 毛利 ÷ 营收 · 按月份降序，合计按自然年汇总</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:6px">金额统一人民币(¥)：2025年按各月实际汇率、2026年按 1元≈205奈拉 折算 · 客单价 = 营收 ÷ 销量 · 单机利润 = 毛利 ÷ 销量 · 毛利率 = 毛利 ÷ 营收 · 按月份降序，合计按自然年汇总</div>
         </div>
     </div>
 </div>
@@ -2491,10 +2511,10 @@ window.updateBrandYoY = function(month) {
         html += '<tr><td style="font-weight:600">' + r.b + '</td>'
             + '<td style="text-align:right">' + Math.round(r.prev).toLocaleString() + '</td><td>' + _pctHtml(mom) + '</td><td>' + Math.round(r.ly).toLocaleString() + '</td>'
             + '<td style="font-weight:700;text-align:right">' + Math.round(r.cur).toLocaleString() + '</td><td>' + _pctHtml(yoy) + '</td>'
-            + '<td style="text-align:right">' + _fmtRmb(r.rPrev) + '</td><td>' + _pctHtml(rMom) + '</td><td>' + _fmtRmb(r.rLy) + '</td>'
-            + '<td style="font-weight:700;text-align:right">' + _fmtRmb(r.rCur) + '</td><td>' + _pctHtml(rYoy) + '</td>'
-            + '<td style="text-align:right">' + _fmtRmb(r.pPrev) + '</td><td>' + _pctHtml(pMom) + '</td><td>' + _fmtRmb(r.pLy) + '</td>'
-            + '<td style="font-weight:700;text-align:right">' + _fmtRmb(r.pCur) + '</td><td>' + _pctHtml(pYoy) + '</td>'
+            + '<td style="text-align:right">' + _fmtRmb(r.rPrev, pm) + '</td><td>' + _pctHtml(rMom) + '</td><td>' + _fmtRmb(r.rLy, lyKey) + '</td>'
+            + '<td style="font-weight:700;text-align:right">' + _fmtRmb(r.rCur, month) + '</td><td>' + _pctHtml(rYoy) + '</td>'
+            + '<td style="text-align:right">' + _fmtRmb(r.pPrev, pm) + '</td><td>' + _pctHtml(pMom) + '</td><td>' + _fmtRmb(r.pLy, lyKey) + '</td>'
+            + '<td style="font-weight:700;text-align:right">' + _fmtRmb(r.pCur, month) + '</td><td>' + _pctHtml(pYoy) + '</td>'
             + '<td style="text-align:right">' + Math.round(r.ytd).toLocaleString() + '</td><td>' + share.toFixed(1) + '%</td></tr>';
     });
     var tMom = tPrev > 0 ? (tCur - tPrev) / tPrev * 100 : null;
@@ -2506,16 +2526,16 @@ window.updateBrandYoY = function(month) {
     html += '<tr style="font-weight:700"><td>全品牌合计</td>'
         + '<td style="text-align:right">' + Math.round(tPrev).toLocaleString() + '</td><td>' + _pctHtml(tMom) + '</td><td>' + Math.round(tLy).toLocaleString() + '</td>'
         + '<td style="text-align:right">' + Math.round(tCur).toLocaleString() + '</td><td>' + _pctHtml(tYoy) + '</td>'
-        + '<td style="text-align:right">' + _fmtRmb(trPrev) + '</td><td>' + _pctHtml(trMom) + '</td><td>' + _fmtRmb(trLy) + '</td>'
-        + '<td style="text-align:right">' + _fmtRmb(trCur) + '</td><td>' + _pctHtml(trYoy) + '</td>'
-        + '<td style="text-align:right">' + _fmtRmb(tpPrev) + '</td><td>' + _pctHtml(tpMom) + '</td><td>' + _fmtRmb(tpLy) + '</td>'
-        + '<td style="text-align:right">' + _fmtRmb(tpCur) + '</td><td>' + _pctHtml(tpYoy) + '</td>'
+        + '<td style="text-align:right">' + _fmtRmb(trPrev, pm) + '</td><td>' + _pctHtml(trMom) + '</td><td>' + _fmtRmb(trLy, lyKey) + '</td>'
+        + '<td style="text-align:right">' + _fmtRmb(trCur, month) + '</td><td>' + _pctHtml(trYoy) + '</td>'
+        + '<td style="text-align:right">' + _fmtRmb(tpPrev, pm) + '</td><td>' + _pctHtml(tpMom) + '</td><td>' + _fmtRmb(tpLy, lyKey) + '</td>'
+        + '<td style="text-align:right">' + _fmtRmb(tpCur, month) + '</td><td>' + _pctHtml(tpYoy) + '</td>'
         + '<td style="text-align:right">' + Math.round(ytdTotal).toLocaleString() + '</td><td>100%</td></tr>';
     document.querySelector('#tbl_brand_yoy tbody').innerHTML = html;
 
     var items = [];
     items.push('📅 <b>' + _mLabel(month) + '</b>：全品牌 <b>' + Math.round(tCur).toLocaleString() + '台</b>（环比 ' + _pctTxt(tMom) + '｜同比 ' + _pctTxt(tYoy) + '）');
-    items.push('💰 营收 <b>' + _fmtRmb(trCur) + '</b>（环比 ' + _pctTxt(trMom) + '｜同比 ' + _pctTxt(trYoy) + '）· 利润 <b>' + _fmtRmb(tpCur) + '</b>（环比 ' + _pctTxt(tpMom) + '｜同比 ' + _pctTxt(tpYoy) + '）');
+    items.push('💰 营收 <b>' + _fmtRmb(trCur, month) + '</b>（环比 ' + _pctTxt(trMom) + '｜同比 ' + _pctTxt(trYoy) + '）· 利润 <b>' + _fmtRmb(tpCur, month) + '</b>（环比 ' + _pctTxt(tpMom) + '｜同比 ' + _pctTxt(tpYoy) + '）');
     var byYoy = rows.filter(function(r){ return r.ly >= 100 && r.cur > 0; }).map(function(r){ return { b: r.b, v: (r.cur - r.ly) / r.ly * 100 }; }).sort(function(a, b2){ return b2.v - a.v; });
     if (byYoy.length >= 2) {
         items.push('📈 <b>同比最佳</b>：' + byYoy[0].b + ' ' + _pctTxt(byYoy[0].v) + '；<b>同比最弱</b>：' + byYoy[byYoy.length - 1].b + ' ' + _pctTxt(byYoy[byYoy.length - 1].v));
@@ -2594,7 +2614,7 @@ window.updateRevFilter = function(v) {
         var mg = rev > 0 ? prof / rev * 100 : 0;
         var sMom = sPrev > 0 ? (sCur - sPrev) / sPrev * 100 : null;
         var sYoy = sLy > 0 ? (sCur - sLy) / sLy * 100 : null;
-        items.push('📅 <b>' + _mLabel(m) + '</b>：营收 <b>' + _fmtRmb(rev) + '</b>（环比 ' + _pctTxt(rMom) + '｜同比 ' + _pctTxt(rYoy) + '），利润 <b>' + _fmtRmb(prof) + '</b>（环比 ' + _pctTxt(pMom) + '｜同比 ' + _pctTxt(pYoy) + '），毛利率 ' + mg.toFixed(1) + '%');
+        items.push('📅 <b>' + _mLabel(m) + '</b>：营收 <b>' + _fmtRmb(rev, m) + '</b>（环比 ' + _pctTxt(rMom) + '｜同比 ' + _pctTxt(rYoy) + '），利润 <b>' + _fmtRmb(prof, m) + '</b>（环比 ' + _pctTxt(pMom) + '｜同比 ' + _pctTxt(pYoy) + '），毛利率 ' + mg.toFixed(1) + '%');
         items.push('📦 销量 ' + Math.round(sCur).toLocaleString() + '台（环比 ' + _pctTxt(sMom) + '｜同比 ' + _pctTxt(sYoy) + '）');
         var cd = _contribData(m);
         if (cd.labels.length && cd.labels.length > 1) {
