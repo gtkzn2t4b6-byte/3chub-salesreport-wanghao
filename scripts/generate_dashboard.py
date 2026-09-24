@@ -1632,10 +1632,35 @@ if H:
         n = fmt_naira(ngn)
         return f'{n} <span style="color:#94a3b8;font-weight:400">{_amt_cny(ngn)}</span>'
 
-    # ===== 月度销量明细 (公司智能机零售销量): 每月 销量/客单价/单机利润/毛利率 =====
+    # 纯人民币金额 (需求: 明细/趋势/同比环比 统一人民币)
+    def _rmb(ngn):
+        cny = ngn * NGN_CNY_RATE
+        if abs(cny) >= 1e8: return f'¥{cny/1e8:.2f}亿'
+        if abs(cny) >= 1e4: return f'¥{cny/1e4:.1f}万'
+        if abs(cny) >= 1e3: return f'¥{cny/1e3:.1f}千'
+        return f'¥{cny:,.0f}'
+
+    # ===== 每月销售明细 (公司智能机零售销量): 每月 销量/营收/利润/客单价/单机利润/毛利率, 降序, 金额人民币 =====
     def _monthly_detail_rows():
-        _rows = []
-        for m in sorted_months:
+        _out = []
+        _prev_year = None
+        _year_q = _year_r = _year_p = 0
+        def _flush_year():
+            nonlocal _prev_year, _year_q, _year_r, _year_p
+            if _prev_year is None:
+                return ''
+            _gm_y = (_year_p / _year_r * 100) if _year_r else 0
+            _gm_y_c = '#16a34a' if _gm_y >= 10 else ('#f59e0b' if _gm_y >= 5 else '#dc2626')
+            return (f'<tr style="font-weight:700;background:var(--surface2);border-top:2px solid var(--border)">'
+                    f'<td style="text-align:left">{_prev_year}年合计</td>'
+                    f'<td style="text-align:right">{_year_q:,.0f}</td>'
+                    f'<td style="text-align:right">{_rmb(_year_r)}</td>'
+                    f'<td style="text-align:right">{_rmb(_year_p)}</td>'
+                    f'<td style="text-align:right">{_rmb(_year_r / _year_q if _year_q else 0)}</td>'
+                    f'<td style="text-align:right">{_rmb(_year_p / _year_q if _year_q else 0)}</td>'
+                    f'<td style="text-align:right;color:{_gm_y_c}">{_gm_y:.1f}%</td></tr>')
+        for m in reversed(sorted_months):
+            _y = int(m.split('-')[0]); _mm = int(m.split('-')[1])
             _q = mt.get(m, 0) or 0
             _r = rev_monthly.get(m, 0) or 0
             _p = profit_monthly.get(m, 0) or 0
@@ -1643,18 +1668,26 @@ if H:
             _up = _p / _q if _q else 0
             _gm = _p / _r * 100 if _r else 0
             _gm_c = '#16a34a' if _gm >= 10 else ('#f59e0b' if _gm >= 5 else '#dc2626')
-            _y = int(m.split('-')[0]); _mm = int(m.split('-')[1])
-            _rows.append(
+            # 年份切换时先输出上一年的合计行
+            if _prev_year is not None and _y != _prev_year:
+                _out.append(_flush_year())
+                _year_q = _year_r = _year_p = 0
+            _prev_year = _y
+            _year_q += _q; _year_r += _r; _year_p += _p
+            _out.append(
                 f'<tr><td style="text-align:left;font-weight:600">{_y}年{_mm}月</td>'
                 f'<td style="text-align:right">{_q:,.0f}</td>'
-                f'<td style="text-align:right">{_amt_pair(_atv)}</td>'
-                f'<td style="text-align:right">{_amt_pair(_up)}</td>'
+                f'<td style="text-align:right">{_rmb(_r)}</td>'
+                f'<td style="text-align:right">{_rmb(_p)}</td>'
+                f'<td style="text-align:right">{_rmb(_atv)}</td>'
+                f'<td style="text-align:right">{_rmb(_up)}</td>'
                 f'<td style="text-align:right;color:{_gm_c};font-weight:600">{_gm:.1f}%</td></tr>'
             )
-        return '\n'.join(_rows)
+        _out.append(_flush_year())
+        return '\n'.join(_out)
     _monthly_detail_html = _monthly_detail_rows()
 
-    # ===== 品牌销量明细 (2026 YTD): 每品牌 销量/客单价/单机利润/毛利率 =====
+    # ===== 品牌销量明细 (2026 YTD): 每品牌 销量/营收/利润/客单价/单机利润/毛利率, 人民币 =====
     def _brand_detail_rows():
         _rows = []
         _br26 = hbrand_rev.get('2026', {})
@@ -1671,8 +1704,10 @@ if H:
             _rows.append(
                 f'<tr><td style="text-align:left;font-weight:600">{b}</td>'
                 f'<td style="text-align:right">{_q:,.0f}</td>'
-                f'<td style="text-align:right">{_amt_pair(_atv)}</td>'
-                f'<td style="text-align:right">{_amt_pair(_up)}</td>'
+                f'<td style="text-align:right">{_rmb(_r)}</td>'
+                f'<td style="text-align:right">{_rmb(_p)}</td>'
+                f'<td style="text-align:right">{_rmb(_atv)}</td>'
+                f'<td style="text-align:right">{_rmb(_up)}</td>'
                 f'<td style="text-align:right;color:{_gm_c};font-weight:600">{_gm:.1f}%</td></tr>'
             )
         return '\n'.join(_rows)
@@ -1713,36 +1748,32 @@ if H:
         return '\n'.join(rows)
     
     # Brand monthly comparison data for JS — 2026 only
+    # 需求2: 品牌月度趋势改为「营收 vs 利润」双线(人民币), 去掉合计; 按品牌选择器切换
     brand_monthly_labels_js = json.dumps(brand_month_labels)
-    brand_monthly_datasets_js = json.dumps([
-        {
-            'label': f'{b}',
-            'data': brand_2026_data[b]['data'],
-            'borderColor': colors_brand[i % len(colors_brand)],
-            'backgroundColor': colors_brand[i % len(colors_brand)] + '22',
-            'tension': 0.3,
-            'borderWidth': 1.6,
-            'pointRadius': 2,
-            'pointHoverRadius': 4
-        } for i, b in enumerate(all_brands[:8]) if b in brand_2026_data
-    ] + [
-        {
-            'label': '合计',
-            'data': [(mt.get(m, 0) or 0) for m in months_2026_only],
-            'borderColor': '#0f172a',
-            'backgroundColor': 'rgba(15,23,42,0.05)',
-            'tension': 0.3,
-            'borderWidth': 3.5,
-            'pointRadius': 3,
-            'pointHoverRadius': 6,
-            'borderDash': []
-        }
-    ])
-    
-    # Revenue & Profit JS
+    # 品牌营收/利润月度(人民币, 万元), 供品牌选择器切换
+    _brand_rev_cny = {}
+    _brand_profit_cny = {}
+    _brand_rev_26 = hbrand_rev.get('2026', {})
+    _brand_profit_26 = hbrand_profit.get('2026', {})
+    for _b in all_brands:
+        _br = _brand_rev_26.get(_b, {})
+        _bp = _brand_profit_26.get(_b, {})
+        _brand_rev_cny[_b] = [round((_br.get(m, 0) or 0) * NGN_CNY_RATE / 1e4, 2) for m in months_2026_only]
+        _brand_profit_cny[_b] = [round((_bp.get(m, 0) or 0) * NGN_CNY_RATE / 1e4, 2) for m in months_2026_only]
+    _brand_trend_brands = all_brands[:8]
+    _brand_trend_brands_js = json.dumps(_brand_trend_brands)
+    _brand_rev_cny_js = json.dumps(_brand_rev_cny)
+    _brand_profit_cny_js = json.dumps(_brand_profit_cny)
+    # 兼容旧变量(仍被 Chart 2a 引用, 现改为品牌营收/利润空数据, 图表改由 JS 动态构建)
+    brand_monthly_datasets_js = '[]'
+
+    # Revenue & Profit JS (公司整体, 人民币)
     rev_profit_labels_js = json.dumps([m.replace('2023-','23-').replace('2024-','24-').replace('2025-','25-').replace('2026-','26-') for m in sorted_months])
     rev_data_js = json.dumps(rev_data)
     profit_data_js = json.dumps(profit_data)
+    # 公司整体营收/利润人民币(万元) 供趋势图
+    rev_cny_data_js = json.dumps([round((rev_monthly.get(m, 0) or 0) * NGN_CNY_RATE / 1e4, 2) for m in sorted_months])
+    profit_cny_data_js = json.dumps([round((profit_monthly.get(m, 0) or 0) * NGN_CNY_RATE / 1e4, 2) for m in sorted_months])
 
     # ===== 月度目标 (各月 TARGET 手机任务合计, 2025+2026) =====
     # 从 ~/Desktop/销售部/增量基数/{year}年/{year}-M TARGET.xlsx 的「手机」sheet 读门店任务之和
@@ -1775,6 +1806,39 @@ if H:
     _target_months_sorted = sorted(_monthly_target.keys())
     print(f"[History] monthly targets loaded: {len(_monthly_target)} months ({_target_months_sorted[0] if _target_months_sorted else '-'} → {_target_months_sorted[-1] if _target_months_sorted else '-'})")
 
+    # ===== 需求4: 月度完成情况 - 各品牌销售 + 品类分布 (含环比) =====
+    # 品牌月度销量(智能机+平板口径, 2026年): brand -> [month -> qty]
+    _cat_data = H.get('category_data', {})
+    _cat_2026 = _cat_data.get('2026', {})
+    # 品类白名单(排除噪声分类)
+    _CAT_WHITELIST = ['智能机', '平板电脑', '功能机', '手机配件', '家电', '服务', '电脑数码', '家电配件']
+    _cat_names = [c for c in _CAT_WHITELIST if c in _cat_2026]
+    # 品牌销售: 用 brands_2026 (brand -> {month: qty}), 2026 月
+    _brand_month_map = {}   # brand -> [qty per months_2026_only]
+    for _b in all_brands[:8]:
+        _bd = brands_2026.get(_b, {})
+        _brand_month_map[_b] = [( _bd.get(m, 0) or 0) for m in months_2026_only]
+    # 品类月度销量: cat -> [qty per months_2026_only]
+    _cat_month_map = {}
+    for _c in _cat_names:
+        _cm = _cat_2026.get(_c, {})
+        _cat_month_map[_c] = [(_cm.get(m, 0) or 0) for m in months_2026_only]
+    # 品牌/品类 环比(当月 vs 上月), 供月份选择器展示
+    _brand_mom = {}   # brand -> [mom% per month index]
+    for _b, _arr in _brand_month_map.items():
+        _moms = []
+        for _i, _v in enumerate(_arr):
+            _pv = _arr[_i-1] if _i > 0 else None
+            _moms.append(round(((_v - _pv) / _pv * 100), 1) if _pv else None)
+        _brand_mom[_b] = _moms
+    _cat_mom = {}
+    for _c, _arr in _cat_month_map.items():
+        _moms = []
+        for _i, _v in enumerate(_arr):
+            _pv = _arr[_i-1] if _i > 0 else None
+            _moms.append(round(((_v - _pv) / _pv * 100), 1) if _pv else None)
+        _cat_mom[_c] = _moms
+
     # Raw monthly data for JS-side month filter & YoY/MoM analysis
     hist_data_js = json.dumps({
         'months': sorted_months,
@@ -1782,7 +1846,17 @@ if H:
         'rev': {m: rev_monthly.get(m, 0) for m in sorted_months},
         'profit': {m: profit_monthly.get(m, 0) for m in sorted_months},
         'sales': {m: (mt.get(m, 0) or 0) for m in sorted_months},
-        'target': {m: _monthly_target.get(m) for m in sorted_months}
+        'target': {m: _monthly_target.get(m) for m in sorted_months},
+        'brand_rev': hbrand_rev,      # 品牌营收(奈拉, 品牌×月)
+        'brand_profit': hbrand_profit,  # 品牌毛利(奈拉, 品牌×月)
+        'brand_rev_cny': _brand_rev_cny,      # 品牌营收(人民币万元, 品牌×2026月)
+        'brand_profit_cny': _brand_profit_cny,  # 品牌毛利(人民币万元, 品牌×2026月)
+        'brand_trend_brands': _brand_trend_brands,  # 品牌趋势下拉顺序
+        'brand_month': _brand_month_map,    # 品牌×2026月 销量
+        'brand_mom': _brand_mom,            # 品牌×2026月 环比
+        'cat_month': _cat_month_map,        # 品类×2026月 销量
+        'cat_mom': _cat_mom,                # 品类×2026月 环比
+        'cat_names': _cat_names,            # 品类白名单顺序
     })
 
     print(f"[History] {total_stores_h} stores, {len(sorted_months)} months loaded")
@@ -1957,32 +2031,30 @@ if H:
         <div id="chart_history_monthly_all_wrap" style="display:none;height:420px"><canvas id="chart_history_monthly_all"></canvas></div>
         <div class="tbl-wrap" style="max-height:460px;margin-top:16px">
             <table id="tbl_history_monthly_detail"><thead><tr>
-                <th style="text-align:left">月份</th><th style="text-align:right">销量(台)</th><th style="text-align:right">客单价</th><th style="text-align:right">单机利润</th><th style="text-align:right">毛利率</th>
+                <th style="text-align:left">月份</th><th style="text-align:right">销量(台)</th><th style="text-align:right">营收(¥)</th><th style="text-align:right">利润(¥)</th><th style="text-align:right">客单价(¥)</th><th style="text-align:right">单机利润(¥)</th><th style="text-align:right">毛利率</th>
             </tr></thead><tbody>
 """ + _monthly_detail_html + """
             </tbody></table>
-            <div style="font-size:11px;color:var(--text2);margin-top:6px">客单价 = 营收 ÷ 销量 · 单机利润 = 毛利 ÷ 销量 · 毛利率 = 毛利 ÷ 营收；奈拉主显 + 人民币(≈1元≈205奈拉)并列</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:6px">金额统一人民币(¥)，1元≈205奈拉 · 客单价 = 营收 ÷ 销量 · 单机利润 = 毛利 ÷ 销量 · 毛利率 = 毛利 ÷ 营收 · 按月份降序，合计按自然年汇总</div>
         </div>
     </div>
 </div>
 
 <!-- Chart 2: Brand Market Share Evolution -->
 <div class="section">
-    <div class="section-header"><div class="section-title">🎯 品牌月度销量趋势 (2026年)</div></div>
+    <div class="section-header">
+        <div class="section-title">🎯 品牌月度趋势 (营收 vs 利润 · 人民币)</div>
+        <select id="sel_brand_trend" onchange="switchBrandTrend(this.value)" style="margin-left:auto;padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px;font-family:var(--font)"></select>
+    </div>
     <div class="section-body">
-        <div class="sub-tabs" style="margin-bottom:8px">
-            <button class="sub-tab active" onclick="switchBrandView('brand_monthly',this)">📊 月度对比</button>
-            <button class="sub-tab" onclick="switchBrandView('brand_share',this)">🥧 市场份额</button>
-        </div>
-        <div id="brand_monthly" style="height:420px"><canvas id="chart_history_brand_monthly"></canvas></div>
-        <div id="brand_share" style="display:none;height:420px"><canvas id="chart_history_brand_share"></canvas></div>
+        <div style="height:420px"><canvas id="chart_history_brand_monthly"></canvas></div>
         <div class="tbl-wrap" style="max-height:400px;margin-top:16px">
             <table id="tbl_history_brand_detail"><thead><tr>
-                <th style="text-align:left">品牌</th><th style="text-align:right">销量(台)</th><th style="text-align:right">客单价</th><th style="text-align:right">单机利润</th><th style="text-align:right">毛利率</th>
+                <th style="text-align:left">品牌</th><th style="text-align:right">销量(台)</th><th style="text-align:right">营收(¥)</th><th style="text-align:right">利润(¥)</th><th style="text-align:right">客单价(¥)</th><th style="text-align:right">单机利润(¥)</th><th style="text-align:right">毛利率</th>
             </tr></thead><tbody>
 """ + _brand_detail_html + """
             </tbody></table>
-            <div style="font-size:11px;color:var(--text2);margin-top:6px">2026 累计口径 · 客单价 = 营收 ÷ 销量 · 单机利润 = 毛利 ÷ 销量 · 毛利率 = 毛利 ÷ 营收；奈拉主显 + 人民币并列</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:6px">2026 累计口径 · 金额统一人民币(¥)，1元≈205奈拉 · 客单价 = 营收 ÷ 销量 · 单机利润 = 毛利 ÷ 销量 · 毛利率 = 毛利 ÷ 营收</div>
         </div>
     </div>
 </div>
@@ -1997,7 +2069,15 @@ if H:
         <div id="brand_yoy_analysis" class="hist-analysis" style="margin-bottom:12px"></div>
         <div class="tbl-wrap" style="max-height:430px">
             <table id="tbl_brand_yoy"><thead><tr>
-                <th>品牌</th><th>上月销量</th><th>环比</th><th>去年同月</th><th>本月销量</th><th>同比</th><th>2026累计</th><th>累计占比</th>
+                <th rowspan="2" style="vertical-align:middle">品牌</th>
+                <th colspan="5" style="text-align:center;border-bottom:1px solid var(--border)">销量(台)</th>
+                <th colspan="5" style="text-align:center;border-bottom:1px solid var(--border)">营收(¥)</th>
+                <th colspan="5" style="text-align:center;border-bottom:1px solid var(--border)">利润(¥)</th>
+                <th rowspan="2" style="vertical-align:middle">2026累计</th><th rowspan="2" style="vertical-align:middle">累计占比</th>
+            </tr><tr>
+                <th>上月</th><th>环比</th><th>去年同月</th><th>本月</th><th>同比</th>
+                <th>上月</th><th>环比</th><th>去年同月</th><th>本月</th><th>同比</th>
+                <th>上月</th><th>环比</th><th>去年同月</th><th>本月</th><th>同比</th>
             </tr></thead><tbody></tbody></table>
         </div>
     </div>
@@ -2012,7 +2092,7 @@ if H:
     <div class="section-body">
         <div id="rev_profit_analysis" class="hist-analysis" style="margin-bottom:12px"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
-            <div><h4 style="margin:0 0 8px;font-size:13px;color:var(--text2)">月度销售额 & 毛利 (百万₦)</h4><div style="height:320px"><canvas id="chart_history_rev_profit"></canvas></div></div>
+            <div><h4 style="margin:0 0 8px;font-size:13px;color:var(--text2)">月度营收 & 利润 (¥)</h4><div style="height:320px"><canvas id="chart_history_rev_profit"></canvas></div></div>
             <div><h4 style="margin:0 0 8px;font-size:13px;color:var(--text2)">品牌贡献 TOP8 <span id="brand_contrib_scope" style="font-weight:400">（2026累计）</span></h4><div style="height:320px"><canvas id="chart_history_brand_contrib"></canvas></div></div>
         </div>
     </div>
@@ -2032,6 +2112,29 @@ if H:
             </tr></thead><tbody>
 """ + _completion_table_html + """
             </tbody></table>
+        </div>
+        <!-- 各品牌销售 + 品类分布 (含环比) -->
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+                <span style="font-size:13px;font-weight:600;color:var(--text)">📦 各品牌销售 & 品类分布</span>
+                <select id="sel_cat_brand_month" onchange="updateCatBrand(this.value)" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px;font-family:var(--font)"></select>
+                <span id="cat_brand_mom_summary" style="font-size:11px;color:var(--text2)"></span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+                <div>
+                    <h4 style="margin:0 0 8px;font-size:13px;color:var(--text2)">各品牌销量 (台)</h4>
+                    <div style="height:300px"><canvas id="chart_cat_brand_brand"></canvas></div>
+                </div>
+                <div>
+                    <h4 style="margin:0 0 8px;font-size:13px;color:var(--text2)">品类分布 (台)</h4>
+                    <div style="height:300px"><canvas id="chart_cat_brand_cat"></canvas></div>
+                </div>
+            </div>
+            <div class="tbl-wrap" style="max-height:360px;margin-top:16px">
+                <table id="tbl_cat_brand"><thead><tr>
+                    <th style="text-align:left">品牌</th><th>本月销量(台)</th><th>环比</th>
+                </tr></thead><tbody></tbody></table>
+            </div>
         </div>
     </div>
 </div>
@@ -2148,46 +2251,56 @@ function initHistoryCharts() {{
         }}
     }};
 
-    // Chart 2a: Brand Monthly Comparison
-    new Chart(document.getElementById('chart_history_brand_monthly'), {{
+    // Chart 2a: Brand Monthly Trend — 营收 vs 利润 (人民币, 按品牌切换)
+    var _chartBrandTrend = new Chart(document.getElementById('chart_history_brand_monthly'), {{
         type: 'line',
         data: {{
             labels: {brand_monthly_labels_js},
-            datasets: {brand_monthly_datasets_js}
+            datasets: [
+                {{
+                    label: '营收(¥万)',
+                    data: (HIST.brand_rev_cny && HIST.brand_rev_cny[HIST.brand_trend_brands[0]]) || [],
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59,130,246,0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    yAxisID: 'y'
+                }},
+                {{
+                    label: '利润(¥万)',
+                    data: (HIST.brand_profit_cny && HIST.brand_profit_cny[HIST.brand_trend_brands[0]]) || [],
+                    borderColor: '#22c55e',
+                    backgroundColor: 'rgba(34,197,94,0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    yAxisID: 'y1'
+                }}
+            ]
         }},
         options: {{
             responsive: true,
             maintainAspectRatio: false,
             plugins: {{
                 legend: {{ position: 'bottom', labels: {{ color: '#94a3b8', usePointStyle: true, boxWidth: 10, padding: 8, font: {{ size: 10 }} }} }},
-                tooltip: {{ callbacks: {{ label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y.toLocaleString() + ' 台' }} }}
+                tooltip: {{ callbacks: {{ label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y.toLocaleString() }} }}
             }},
             scales: {{
-                y: {{ beginAtZero: false, grid: {{ color: 'rgba(51,65,85,0.35)' }}, ticks: {{ color: '#94a3b8' }} }},
+                y: {{ type: 'linear', position: 'left', beginAtZero: true, grid: {{ color: 'rgba(51,65,85,0.35)' }}, ticks: {{ color: '#94a3b8', callback: v => v + '万' }} }},
+                y1: {{ type: 'linear', position: 'right', beginAtZero: true, grid: {{ display: false }}, ticks: {{ color: '#22c55e', callback: v => v + '万' }} }},
                 x: {{ grid: {{ color: 'rgba(51,65,85,0.2)' }}, ticks: {{ color: '#94a3b8' }} }}
             }}
         }}
     }});
 
-    // Chart 2b: Brand Share (Stacked Bar)
-    new Chart(document.getElementById('chart_history_brand_share'), {{
-        type: 'bar',
-        data: {{
-            labels: {brand_share_labels_js},
-            datasets: {brand_share_datasets_js}
-        }},
-        options: {{
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {{
-                legend: {{ position: 'bottom', labels: {{ color: '#94a3b8', usePointStyle: true, boxWidth: 10, padding: 8, font: {{ size: 10 }} }} }}
-            }},
-            scales: {{
-                x: {{ stacked: true, grid: {{ color: 'rgba(51,65,85,0.2)' }}, ticks: {{ color: '#94a3b8' }} }},
-                y: {{ stacked: true, grid: {{ color: 'rgba(51,65,85,0.35)' }}, ticks: {{ color: '#94a3b8' }} }}
-            }}
-        }}
-    }});
+    // 品牌趋势切换
+    window.switchBrandTrend = function(brand) {{
+        if (!_chartBrandTrend) return;
+        var rev = (HIST.brand_rev_cny && HIST.brand_rev_cny[brand]) || [];
+        var prof = (HIST.brand_profit_cny && HIST.brand_profit_cny[brand]) || [];
+        _chartBrandTrend.data.datasets[0].data = rev;
+        _chartBrandTrend.data.datasets[1].data = prof;
+        _chartBrandTrend.update();
+    }};
 
     // Chart 3: Brand Contribution (Doughnut)
     const _bgC = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
@@ -2227,15 +2340,15 @@ function initHistoryCharts() {{
         }}
     }});
 
-    // Chart 4: Revenue & Profit
+    // Chart 4: Revenue & Profit (人民币)
     _chartRevProfit = new Chart(document.getElementById('chart_history_rev_profit'), {{
         type: 'line',
         data: {{
             labels: {rev_profit_labels_js},
             datasets: [
                 {{
-                    label: '营收 (百万₦)',
-                    data: {rev_data_js},
+                    label: '营收 (¥万)',
+                    data: {rev_cny_data_js},
                     borderColor: '#3b82f6',
                     backgroundColor: 'rgba(59,130,246,0.1)',
                     fill: true,
@@ -2243,8 +2356,8 @@ function initHistoryCharts() {{
                     yAxisID: 'y'
                 }},
                 {{
-                    label: '毛利 (百万₦)',
-                    data: {profit_data_js},
+                    label: '利润 (¥万)',
+                    data: {profit_cny_data_js},
                     borderColor: '#22c55e',
                     backgroundColor: 'rgba(34,197,94,0.1)',
                     fill: true,
@@ -2261,8 +2374,8 @@ function initHistoryCharts() {{
                 datalabels: {{ display: false }}
             }},
             scales: {{
-                y: {{ type: 'linear', position: 'left', grid: {{ color: 'rgba(51,65,85,0.35)' }}, ticks: {{ color: '#94a3b8', callback: v => v.toFixed(0) + 'M' }} }},
-                y1: {{ type: 'linear', position: 'right', grid: {{ display: false }}, ticks: {{ color: '#22c55e', callback: v => v.toFixed(0) + 'M' }} }},
+                y: {{ type: 'linear', position: 'left', grid: {{ color: 'rgba(51,65,85,0.35)' }}, ticks: {{ color: '#94a3b8', callback: v => v.toFixed(0) + '万' }} }},
+                y1: {{ type: 'linear', position: 'right', grid: {{ display: false }}, ticks: {{ color: '#22c55e', callback: v => v.toFixed(0) + '万' }} }},
                 x: {{ grid: {{ color: 'rgba(51,65,85,0.2)' }}, ticks: {{ color: '#94a3b8', maxRotation: 45 }} }}
             }}
         }}
@@ -2309,16 +2422,6 @@ function initHistoryCharts() {{
     }}
     _initHistFilters();
 }}
-
-function switchBrandView(name, btn) {{
-    document.querySelectorAll('#page-history .sub-tab').forEach(t => t.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById('brand_monthly').style.display = name === 'brand_monthly' ? 'block' : 'none';
-    document.getElementById('brand_share').style.display = name === 'brand_share' ? 'block' : 'none';
-    if (name === 'brand_share') {{
-        setTimeout(() => {{ if(window.Chart) Chart.helpers.each(Chart.instances, c => c.resize()); }}, 50);
-    }}
-}}
 """
     # Plain (non-f-string) JS for brand YoY/MoM & month filter — single braces OK
     history_js += """
@@ -2336,9 +2439,19 @@ function _pctTxt(v) {
     return (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
 }
 function _fmtM(v) { return '₦' + (v / 1e6).toLocaleString(undefined, { maximumFractionDigits: 1 }) + 'M'; }
+function _fmtRmb(v) {
+    if (v === null || v === undefined || !isFinite(v)) return '—';
+    var cny = v * (1 / 205);
+    if (Math.abs(cny) >= 1e8) return '¥' + (cny / 1e8).toFixed(2) + '亿';
+    if (Math.abs(cny) >= 1e4) return '¥' + (cny / 1e4).toFixed(1) + '万';
+    if (Math.abs(cny) >= 1e3) return '¥' + (cny / 1e3).toFixed(1) + '千';
+    return '¥' + Math.round(cny).toLocaleString();
+}
 
 window.updateBrandYoY = function(month) {
     var b26 = HIST.brand['2026'] || {}, b25 = HIST.brand['2025'] || {};
+    var br26 = HIST.brand_rev['2026'] || {}, br25 = HIST.brand_rev['2025'] || {};
+    var bp26 = HIST.brand_profit['2026'] || {}, bp25 = HIST.brand_profit['2025'] || {};
     var names = {};
     Object.keys(b26).forEach(function(b){ names[b] = 1; });
     Object.keys(b25).forEach(function(b){ names[b] = 1; });
@@ -2350,28 +2463,59 @@ window.updateBrandYoY = function(month) {
         var cur = (b26[b] && b26[b][month]) || 0;
         var prev = ((b26[b] && b26[b][pm]) || (b25[b] && b25[b][pm])) || 0;
         var ly = (b25[b] && b25[b][lyKey]) || 0;
+        // 营收
+        var rCur = ((br26[b] && br26[b][month]) || (br25[b] && br25[b][month])) || 0;
+        var rPrev = ((br26[b] && br26[b][pm]) || (br25[b] && br25[b][pm])) || 0;
+        var rLy = (br25[b] && br25[b][lyKey]) || 0;
+        // 利润
+        var pCur = ((bp26[b] && bp26[b][month]) || (bp25[b] && bp25[b][month])) || 0;
+        var pPrev = ((bp26[b] && bp26[b][pm]) || (bp25[b] && bp25[b][pm])) || 0;
+        var pLy = (bp25[b] && bp25[b][lyKey]) || 0;
         var ytd = 0;
         months26.forEach(function(m){ ytd += (b26[b] && b26[b][m]) || 0; });
         ytdTotal += ytd;
-        rows.push({ b: b, cur: cur, prev: prev, ly: ly, ytd: ytd });
+        rows.push({ b: b, cur: cur, prev: prev, ly: ly, ytd: ytd, rCur: rCur, rPrev: rPrev, rLy: rLy, pCur: pCur, pPrev: pPrev, pLy: pLy });
     });
     rows.sort(function(a, b2) { return b2.cur - a.cur; });
-    var tCur = 0, tPrev = 0, tLy = 0;
-    rows.forEach(function(r){ tCur += r.cur; tPrev += r.prev; tLy += r.ly; });
+    var tCur = 0, tPrev = 0, tLy = 0, trCur = 0, trPrev = 0, trLy = 0, tpCur = 0, tpPrev = 0, tpLy = 0;
+    rows.forEach(function(r){ tCur += r.cur; tPrev += r.prev; tLy += r.ly; trCur += r.rCur; trPrev += r.rPrev; trLy += r.rLy; tpCur += r.pCur; tpPrev += r.pPrev; tpLy += r.pLy; });
     var html = '';
     rows.forEach(function(r) {
         var mom = r.prev > 0 ? (r.cur - r.prev) / r.prev * 100 : null;
         var yoy = r.ly > 0 ? (r.cur - r.ly) / r.ly * 100 : null;
+        var rMom = r.rPrev > 0 ? (r.rCur - r.rPrev) / r.rPrev * 100 : null;
+        var rYoy = r.rLy > 0 ? (r.rCur - r.rLy) / r.rLy * 100 : null;
+        var pMom = r.pPrev > 0 ? (r.pCur - r.pPrev) / r.pPrev * 100 : null;
+        var pYoy = r.pLy > 0 ? (r.pCur - r.pLy) / r.pLy * 100 : null;
         var share = ytdTotal > 0 ? r.ytd / ytdTotal * 100 : 0;
-        html += '<tr><td style="font-weight:600">' + r.b + '</td><td>' + Math.round(r.prev).toLocaleString() + '</td><td>' + _pctHtml(mom) + '</td><td>' + Math.round(r.ly).toLocaleString() + '</td><td style="font-weight:700">' + Math.round(r.cur).toLocaleString() + '</td><td>' + _pctHtml(yoy) + '</td><td>' + Math.round(r.ytd).toLocaleString() + '</td><td>' + share.toFixed(1) + '%</td></tr>';
+        html += '<tr><td style="font-weight:600">' + r.b + '</td>'
+            + '<td style="text-align:right">' + Math.round(r.prev).toLocaleString() + '</td><td>' + _pctHtml(mom) + '</td><td>' + Math.round(r.ly).toLocaleString() + '</td>'
+            + '<td style="font-weight:700;text-align:right">' + Math.round(r.cur).toLocaleString() + '</td><td>' + _pctHtml(yoy) + '</td>'
+            + '<td style="text-align:right">' + _fmtRmb(r.rPrev) + '</td><td>' + _pctHtml(rMom) + '</td><td>' + _fmtRmb(r.rLy) + '</td>'
+            + '<td style="font-weight:700;text-align:right">' + _fmtRmb(r.rCur) + '</td><td>' + _pctHtml(rYoy) + '</td>'
+            + '<td style="text-align:right">' + _fmtRmb(r.pPrev) + '</td><td>' + _pctHtml(pMom) + '</td><td>' + _fmtRmb(r.pLy) + '</td>'
+            + '<td style="font-weight:700;text-align:right">' + _fmtRmb(r.pCur) + '</td><td>' + _pctHtml(pYoy) + '</td>'
+            + '<td style="text-align:right">' + Math.round(r.ytd).toLocaleString() + '</td><td>' + share.toFixed(1) + '%</td></tr>';
     });
     var tMom = tPrev > 0 ? (tCur - tPrev) / tPrev * 100 : null;
     var tYoy = tLy > 0 ? (tCur - tLy) / tLy * 100 : null;
-    html += '<tr style="font-weight:700"><td>全品牌合计</td><td>' + Math.round(tPrev).toLocaleString() + '</td><td>' + _pctHtml(tMom) + '</td><td>' + Math.round(tLy).toLocaleString() + '</td><td>' + Math.round(tCur).toLocaleString() + '</td><td>' + _pctHtml(tYoy) + '</td><td>' + Math.round(ytdTotal).toLocaleString() + '</td><td>100%</td></tr>';
+    var trMom = trPrev > 0 ? (trCur - trPrev) / trPrev * 100 : null;
+    var trYoy = trLy > 0 ? (trCur - trLy) / trLy * 100 : null;
+    var tpMom = tpPrev > 0 ? (tpCur - tpPrev) / tpPrev * 100 : null;
+    var tpYoy = tpLy > 0 ? (tpCur - tpLy) / tpLy * 100 : null;
+    html += '<tr style="font-weight:700"><td>全品牌合计</td>'
+        + '<td style="text-align:right">' + Math.round(tPrev).toLocaleString() + '</td><td>' + _pctHtml(tMom) + '</td><td>' + Math.round(tLy).toLocaleString() + '</td>'
+        + '<td style="text-align:right">' + Math.round(tCur).toLocaleString() + '</td><td>' + _pctHtml(tYoy) + '</td>'
+        + '<td style="text-align:right">' + _fmtRmb(trPrev) + '</td><td>' + _pctHtml(trMom) + '</td><td>' + _fmtRmb(trLy) + '</td>'
+        + '<td style="text-align:right">' + _fmtRmb(trCur) + '</td><td>' + _pctHtml(trYoy) + '</td>'
+        + '<td style="text-align:right">' + _fmtRmb(tpPrev) + '</td><td>' + _pctHtml(tpMom) + '</td><td>' + _fmtRmb(tpLy) + '</td>'
+        + '<td style="text-align:right">' + _fmtRmb(tpCur) + '</td><td>' + _pctHtml(tpYoy) + '</td>'
+        + '<td style="text-align:right">' + Math.round(ytdTotal).toLocaleString() + '</td><td>100%</td></tr>';
     document.querySelector('#tbl_brand_yoy tbody').innerHTML = html;
 
     var items = [];
-    items.push('📅 <b>' + _mLabel(month) + '</b>：全品牌 <b>' + Math.round(tCur).toLocaleString() + '台</b>，环比 ' + _pctTxt(tMom) + '，同比 ' + _pctTxt(tYoy));
+    items.push('📅 <b>' + _mLabel(month) + '</b>：全品牌 <b>' + Math.round(tCur).toLocaleString() + '台</b>（环比 ' + _pctTxt(tMom) + '｜同比 ' + _pctTxt(tYoy) + '）');
+    items.push('💰 营收 <b>' + _fmtRmb(trCur) + '</b>（环比 ' + _pctTxt(trMom) + '｜同比 ' + _pctTxt(trYoy) + '）· 利润 <b>' + _fmtRmb(tpCur) + '</b>（环比 ' + _pctTxt(tpMom) + '｜同比 ' + _pctTxt(tpYoy) + '）');
     var byYoy = rows.filter(function(r){ return r.ly >= 100 && r.cur > 0; }).map(function(r){ return { b: r.b, v: (r.cur - r.ly) / r.ly * 100 }; }).sort(function(a, b2){ return b2.v - a.v; });
     if (byYoy.length >= 2) {
         items.push('📈 <b>同比最佳</b>：' + byYoy[0].b + ' ' + _pctTxt(byYoy[0].v) + '；<b>同比最弱</b>：' + byYoy[byYoy.length - 1].b + ' ' + _pctTxt(byYoy[byYoy.length - 1].v));
@@ -2425,8 +2569,8 @@ window.updateRevFilter = function(v) {
         var mg = rev > 0 ? prof / rev * 100 : 0;
         var rYoy = rev25 > 0 ? (rev - rev25) / rev25 * 100 : null;
         var pYoy = prof25 > 0 ? (prof - prof25) / prof25 * 100 : null;
-        items.push('📊 <b>2026累计（' + months26.length + '个月）</b>：营收 ' + _fmtM(rev) + '，毛利 ' + _fmtM(prof) + '，毛利率 ' + mg.toFixed(1) + '%');
-        items.push('📅 同比2025同期：营收 ' + _pctTxt(rYoy) + '，毛利 ' + _pctTxt(pYoy));
+        items.push('📊 <b>2026累计（' + months26.length + '个月）</b>：营收 <b>' + _fmtRmb(rev) + '</b>，利润 <b>' + _fmtRmb(prof) + '</b>，毛利率 ' + mg.toFixed(1) + '%');
+        items.push('📅 同比2025同期：营收 ' + _pctTxt(rYoy) + '，利润 ' + _pctTxt(pYoy));
         var cd = _contribData(null);
         if (cd.labels.length) {
             items.push('🥇 <b>贡献第一</b>：' + cd.labels[0] + ' ' + cd.data[0].toFixed(1) + '%（2026累计份额）');
@@ -2446,10 +2590,11 @@ window.updateRevFilter = function(v) {
         var rMom = revP ? (rev - revP) / revP * 100 : null;
         var rYoy = revY ? (rev - revY) / revY * 100 : null;
         var pMom = profP ? (prof - profP) / profP * 100 : null;
+        var pYoy = profY ? (prof - profY) / profY * 100 : null;
         var mg = rev > 0 ? prof / rev * 100 : 0;
         var sMom = sPrev > 0 ? (sCur - sPrev) / sPrev * 100 : null;
         var sYoy = sLy > 0 ? (sCur - sLy) / sLy * 100 : null;
-        items.push('📅 <b>' + _mLabel(m) + '</b>：营收 ' + _fmtM(rev) + '（环比 ' + _pctTxt(rMom) + '｜同比 ' + _pctTxt(rYoy) + '），毛利 ' + _fmtM(prof) + '（环比 ' + _pctTxt(pMom) + '），毛利率 ' + mg.toFixed(1) + '%');
+        items.push('📅 <b>' + _mLabel(m) + '</b>：营收 <b>' + _fmtRmb(rev) + '</b>（环比 ' + _pctTxt(rMom) + '｜同比 ' + _pctTxt(rYoy) + '），利润 <b>' + _fmtRmb(prof) + '</b>（环比 ' + _pctTxt(pMom) + '｜同比 ' + _pctTxt(pYoy) + '），毛利率 ' + mg.toFixed(1) + '%');
         items.push('📦 销量 ' + Math.round(sCur).toLocaleString() + '台（环比 ' + _pctTxt(sMom) + '｜同比 ' + _pctTxt(sYoy) + '）');
         var cd = _contribData(m);
         if (cd.labels.length && cd.labels.length > 1) {
@@ -2476,9 +2621,78 @@ function _initHistFilters() {
     if (selB) selB.innerHTML = months26.slice().reverse().map(function(m){ return '<option value="' + m + '">' + _mLabel(m) + '</option>'; }).join('');
     var selR = document.getElementById('sel_rev_month');
     if (selR) selR.innerHTML = '<option value="all">2026累计</option>' + HIST.months.slice().reverse().map(function(m){ return '<option value="' + m + '">' + _mLabel(m) + '</option>'; }).join('');
+    // 品牌趋势下拉 (营收 vs 利润)
+    var selT = document.getElementById('sel_brand_trend');
+    if (selT) {
+        var brands = HIST.brand_trend_brands || [];
+        selT.innerHTML = brands.map(function(b){ return '<option value="' + b + '">' + b + '</option>'; }).join('');
+        if (brands.length) window.switchBrandTrend(brands[0]);
+    }
+    // 品类/品牌月度分布初始化
+    if (window.initCatBrand) window.initCatBrand();
     if (months26.length) window.updateBrandYoY(months26[months26.length - 1]);
     window.updateRevFilter('all');
 }
+
+// ===== 需求4: 各品牌销售 & 品类分布 (含环比) =====
+var _chartCatBrand = null, _chartCatCat = null;
+window.initCatBrand = function() {
+    var sel = document.getElementById('sel_cat_brand_month');
+    if (!sel) return;
+    var months = HIST.months.filter(function(m){ return m.indexOf('2026-') === 0; });
+    sel.innerHTML = months.slice().reverse().map(function(m){ return '<option value="' + m + '">' + _mLabel(m) + '</option>'; }).join('');
+    if (months.length) window.updateCatBrand(months[months.length - 1]);
+};
+window.updateCatBrand = function(month) {
+    var months = HIST.months.filter(function(m){ return m.indexOf('2026-') === 0; });
+    var idx = months.indexOf(month);
+    if (idx < 0) return;
+    var brands = Object.keys(HIST.brand_month || {});
+    var bVals = brands.map(function(b){ return (HIST.brand_month[b] && HIST.brand_month[b][idx]) || 0; });
+    var bMoms = brands.map(function(b){ return (HIST.brand_mom[b] && HIST.brand_mom[b][idx]); });
+    var cats = HIST.cat_names || [];
+    var cVals = cats.map(function(c){ return (HIST.cat_month[c] && HIST.cat_month[c][idx]) || 0; });
+    var cMoms = cats.map(function(c){ return (HIST.cat_mom[c] && HIST.cat_mom[c][idx]); });
+    var colors = ['#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16'];
+    var catColors = ['#3b82f6','#8b5cf6','#f59e0b','#22c55e','#ec4899','#06b6d4','#84cc16','#64748b'];
+    // 品牌柱状图
+    var bCanvas = document.getElementById('chart_cat_brand_brand');
+    if (bCanvas) {
+        if (_chartCatBrand) _chartCatBrand.destroy();
+        _chartCatBrand = new Chart(bCanvas, {
+            type: 'bar',
+            data: { labels: brands, datasets: [{ label: '销量(台)', data: bVals, backgroundColor: brands.map(function(_, i){ return colors[i % colors.length] + 'cc'; }) }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c){ var v = c.parsed.y; var mom = bMoms[c.dataIndex]; return '销量 ' + v.toLocaleString() + ' 台' + (mom === null || mom === undefined ? '' : ' (环比 ' + (mom >= 0 ? '+' : '') + mom.toFixed(1) + '%)'); } } } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(51,65,85,0.35)' }, ticks: { color: '#94a3b8' } }, x: { grid: { display: false }, ticks: { color: '#94a3b8', maxRotation: 45 } } } }
+        });
+    }
+    // 品类柱状图
+    var cCanvas = document.getElementById('chart_cat_brand_cat');
+    if (cCanvas) {
+        if (_chartCatCat) _chartCatCat.destroy();
+        _chartCatCat = new Chart(cCanvas, {
+            type: 'bar',
+            data: { labels: cats, datasets: [{ label: '销量(台)', data: cVals, backgroundColor: cats.map(function(_, i){ return catColors[i % catColors.length] + 'cc'; }) }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c){ var v = c.parsed.y; var mom = cMoms[c.dataIndex]; return '销量 ' + v.toLocaleString() + ' 台' + (mom === null || mom === undefined ? '' : ' (环比 ' + (mom >= 0 ? '+' : '') + mom.toFixed(1) + '%)'); } } } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(51,65,85,0.35)' }, ticks: { color: '#94a3b8' } }, x: { grid: { display: false }, ticks: { color: '#94a3b8', maxRotation: 45 } } } }
+        });
+    }
+    // 品牌表格 (含环比)
+    var tbody = document.querySelector('#tbl_cat_brand tbody');
+    if (tbody) {
+        var arr = brands.map(function(b, i){ return { b: b, v: bVals[i], mom: bMoms[i] }; }).sort(function(a, b2){ return b2.v - a.v; });
+        tbody.innerHTML = arr.map(function(r) {
+            var momHtml = (r.mom === null || r.mom === undefined) ? '—' : '<span style="color:' + (r.mom >= 0 ? '#22c55e' : '#ef4444') + ';font-weight:600">' + (r.mom >= 0 ? '+' : '') + r.mom.toFixed(1) + '%</span>';
+            return '<tr><td style="text-align:left;font-weight:600">' + r.b + '</td><td style="text-align:right">' + Math.round(r.v).toLocaleString() + '</td><td>' + momHtml + '</td></tr>';
+        }).join('');
+    }
+    // 摘要
+    var sumEl = document.getElementById('cat_brand_mom_summary');
+    if (sumEl) {
+        var tCur = bVals.reduce(function(a, b){ return a + b; }, 0);
+        var tPrev = brands.reduce(function(a, b){ return a + ((HIST.brand_month[b] && idx > 0 && HIST.brand_month[b][idx-1]) || 0); }, 0);
+        var mom = tPrev > 0 ? (tCur - tPrev) / tPrev * 100 : null;
+        sumEl.innerHTML = _mLabel(month) + ' 全品牌 ' + Math.round(tCur).toLocaleString() + '台' + (mom === null ? '' : '，环比 ' + (mom >= 0 ? '+' : '') + mom.toFixed(1) + '%');
+    }
+};
 """
 else:
     history_page_html = ''

@@ -34,6 +34,7 @@ def main():
     brand_sales = {}    # brand -> { 'YYYY-MM': qty }
     brand_revenue = {}  # brand -> { 'YYYY-MM': amount }
     brand_profit = {}   # brand -> { 'YYYY-MM': amount }
+    category_sales = {}  # category -> { 'YYYY-MM': qty }  (全品类销量分布)
     
     for fpath in files:
         fname = Path(fpath).stem
@@ -54,6 +55,17 @@ def main():
             print(f"  ❌ Error reading: {e}")
             continue
         
+        # 品类销量分布 (全品类, 过滤前采集; 供"月度完成情况-品类分布")
+        _cat_df = df[df['销售数量'] > 0].copy()
+        _cat_agg = _cat_df.groupby('统计分类')['销售数量'].sum()
+        for _c, _v in _cat_agg.items():
+            if pd.isna(_c) or not isinstance(_c, str):
+                continue
+            _cn = _c.strip()
+            if not _cn:
+                continue
+            category_sales.setdefault(_cn, {})[ym] = float(_v)
+
         # Filter: SMART + TABLET only, exclude non-phone categories
         df = df[df['统计分类'].isin(['智能机', '平板电脑'])]
         df = df[~df['统计分类'].isin(EXCLUDE_CATS)]
@@ -133,6 +145,13 @@ def main():
             year = m.split('-')[0]
             brand_profit_data.setdefault(year, {}).setdefault(brand, {})[m] = v
 
+    # Category sales by year (品类分布)
+    category_data = {}
+    for cat, months in category_sales.items():
+        for m, v in months.items():
+            year = m.split('-')[0]
+            category_data.setdefault(year, {}).setdefault(cat, {})[m] = v
+
     # Assemble output
     output = {
         "data": {
@@ -147,6 +166,7 @@ def main():
         "brand_data": brand_data,
         "brand_revenue": brand_rev_data,
         "brand_profit": brand_profit_data,
+        "category_data": category_data,
     }
     
     with open(out_path, 'w') as f:

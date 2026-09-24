@@ -11,8 +11,10 @@ scripts/__pycache__/
 /price_trends.html
 /store-stockout.html
 
-# Memory
+# Memory & project data
 .workbuddy/memory/
+.workbuddy/backups/
+.workbuddy/plan/
 
 # OS files
 .DS_Store
