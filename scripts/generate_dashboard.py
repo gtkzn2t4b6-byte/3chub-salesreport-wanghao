@@ -1646,10 +1646,10 @@ if H:
             _y = int(m.split('-')[0]); _mm = int(m.split('-')[1])
             _rows.append(
                 f'<tr><td style="text-align:left;font-weight:600">{_y}年{_mm}月</td>'
-                f'<td>{_q:,.0f}</td>'
-                f'<td>{_amt_pair(_atv)}</td>'
-                f'<td>{_amt_pair(_up)}</td>'
-                f'<td style="color:{_gm_c};font-weight:600">{_gm:.1f}%</td></tr>'
+                f'<td style="text-align:right">{_q:,.0f}</td>'
+                f'<td style="text-align:right">{_amt_pair(_atv)}</td>'
+                f'<td style="text-align:right">{_amt_pair(_up)}</td>'
+                f'<td style="text-align:right;color:{_gm_c};font-weight:600">{_gm:.1f}%</td></tr>'
             )
         return '\n'.join(_rows)
     _monthly_detail_html = _monthly_detail_rows()
@@ -1670,10 +1670,10 @@ if H:
             _gm_c = '#16a34a' if _gm >= 10 else ('#f59e0b' if _gm >= 5 else '#dc2626')
             _rows.append(
                 f'<tr><td style="text-align:left;font-weight:600">{b}</td>'
-                f'<td>{_q:,.0f}</td>'
-                f'<td>{_amt_pair(_atv)}</td>'
-                f'<td>{_amt_pair(_up)}</td>'
-                f'<td style="color:{_gm_c};font-weight:600">{_gm:.1f}%</td></tr>'
+                f'<td style="text-align:right">{_q:,.0f}</td>'
+                f'<td style="text-align:right">{_amt_pair(_atv)}</td>'
+                f'<td style="text-align:right">{_amt_pair(_up)}</td>'
+                f'<td style="text-align:right;color:{_gm_c};font-weight:600">{_gm:.1f}%</td></tr>'
             )
         return '\n'.join(_rows)
     _brand_detail_html = _brand_detail_rows()
@@ -1716,13 +1716,27 @@ if H:
     brand_monthly_labels_js = json.dumps(brand_month_labels)
     brand_monthly_datasets_js = json.dumps([
         {
-            'label': f'{b} 2026',
+            'label': f'{b}',
             'data': brand_2026_data[b]['data'],
             'borderColor': colors_brand[i % len(colors_brand)],
-            'backgroundColor': colors_brand[i % len(colors_brand)] + '44',
+            'backgroundColor': colors_brand[i % len(colors_brand)] + '22',
             'tension': 0.3,
-            'borderWidth': 2.5
+            'borderWidth': 1.6,
+            'pointRadius': 2,
+            'pointHoverRadius': 4
         } for i, b in enumerate(all_brands[:8]) if b in brand_2026_data
+    ] + [
+        {
+            'label': '合计',
+            'data': [(mt.get(m, 0) or 0) for m in months_2026_only],
+            'borderColor': '#0f172a',
+            'backgroundColor': 'rgba(15,23,42,0.05)',
+            'tension': 0.3,
+            'borderWidth': 3.5,
+            'pointRadius': 3,
+            'pointHoverRadius': 6,
+            'borderDash': []
+        }
     ])
     
     # Revenue & Profit JS
@@ -1943,7 +1957,7 @@ if H:
         <div id="chart_history_monthly_all_wrap" style="display:none;height:420px"><canvas id="chart_history_monthly_all"></canvas></div>
         <div class="tbl-wrap" style="max-height:460px;margin-top:16px">
             <table id="tbl_history_monthly_detail"><thead><tr>
-                <th style="text-align:left">月份</th><th>销量(台)</th><th>客单价</th><th>单机利润</th><th>毛利率</th>
+                <th style="text-align:left">月份</th><th style="text-align:right">销量(台)</th><th style="text-align:right">客单价</th><th style="text-align:right">单机利润</th><th style="text-align:right">毛利率</th>
             </tr></thead><tbody>
 """ + _monthly_detail_html + """
             </tbody></table>
@@ -1964,7 +1978,7 @@ if H:
         <div id="brand_share" style="display:none;height:420px"><canvas id="chart_history_brand_share"></canvas></div>
         <div class="tbl-wrap" style="max-height:400px;margin-top:16px">
             <table id="tbl_history_brand_detail"><thead><tr>
-                <th style="text-align:left">品牌</th><th>销量(台)</th><th>客单价</th><th>单机利润</th><th>毛利率</th>
+                <th style="text-align:left">品牌</th><th style="text-align:right">销量(台)</th><th style="text-align:right">客单价</th><th style="text-align:right">单机利润</th><th style="text-align:right">毛利率</th>
             </tr></thead><tbody>
 """ + _brand_detail_html + """
             </tbody></table>
@@ -2074,7 +2088,7 @@ function initHistoryCharts() {{
                 tooltip: {{ callbacks: {{ label: ctx => ctx.parsed.y.toLocaleString() + ' 台' }} }}
             }},
             scales: {{
-                y: {{ beginAtZero: false, grid: {{ color: 'rgba(51,65,85,0.35)' }}, ticks: {{ color: '#94a3b8' }} }},
+                y: {{ beginAtZero: true, grid: {{ color: 'rgba(51,65,85,0.35)' }}, ticks: {{ color: '#94a3b8' }} }},
                 x: {{ grid: {{ color: 'rgba(51,65,85,0.35)' }}, ticks: {{ color: '#94a3b8', maxRotation: 45 }} }}
             }}
         }}
@@ -2111,7 +2125,7 @@ function initHistoryCharts() {{
                     tooltip: {{ callbacks: {{ label: ctx => ctx.parsed.y.toLocaleString() + ' 台' }} }}
                 }},
                 scales: {{
-                    y: {{ beginAtZero: false, grid: {{ color: 'rgba(51,65,85,0.35)' }}, ticks: {{ color: '#94a3b8' }} }},
+                    y: {{ beginAtZero: true, grid: {{ color: 'rgba(51,65,85,0.35)' }}, ticks: {{ color: '#94a3b8' }} }},
                     x: {{ grid: {{ color: 'rgba(51,65,85,0.35)' }}, ticks: {{ color: '#94a3b8', maxRotation: 60, font: {{ size: 9 }} }} }}
                 }}
             }}
