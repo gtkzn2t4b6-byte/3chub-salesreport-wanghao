@@ -32,6 +32,8 @@ def main():
     revenue = {}       # store -> { 'YYYY-MM': amount }
     gross_profit = {}  # store -> { 'YYYY-MM': amount }
     brand_sales = {}    # brand -> { 'YYYY-MM': qty }
+    brand_revenue = {}  # brand -> { 'YYYY-MM': amount }
+    brand_profit = {}   # brand -> { 'YYYY-MM': amount }
     
     for fpath in files:
         fname = Path(fpath).stem
@@ -75,7 +77,11 @@ def main():
             gross_profit.setdefault(store, {})[ym] = float(row['profit'])
         
         # Aggregate by brand
-        brand_agg = df.groupby('品牌').agg(qty=('销售数量', 'sum'))
+        brand_agg = df.groupby('品牌').agg(
+            qty=('销售数量', 'sum'),
+            rev=('零售金额', 'sum'),
+            profit=('毛利', 'sum')
+        )
         for brand, row in brand_agg.iterrows():
             if pd.isna(brand) or not isinstance(brand, str):
                 continue
@@ -83,6 +89,8 @@ def main():
             if not b or b in ('SERVICE', 'nan'):
                 continue
             brand_sales.setdefault(b, {})[ym] = float(row['qty'])
+            brand_revenue.setdefault(b, {})[ym] = float(row['rev'])
+            brand_profit.setdefault(b, {})[ym] = float(row['profit'])
         
         total_qty = store_agg['qty'].sum()
         total_rev = store_agg['rev'].sum()
@@ -112,7 +120,19 @@ def main():
         for m, v in months.items():
             year = m.split('-')[0]
             brand_data.setdefault(year, {}).setdefault(brand, {})[m] = v
-    
+
+    # Brand revenue/profit by year (for 客单价/单机利润/毛利率)
+    brand_rev_data = {}
+    brand_profit_data = {}
+    for brand, months in brand_revenue.items():
+        for m, v in months.items():
+            year = m.split('-')[0]
+            brand_rev_data.setdefault(year, {}).setdefault(brand, {})[m] = v
+    for brand, months in brand_profit.items():
+        for m, v in months.items():
+            year = m.split('-')[0]
+            brand_profit_data.setdefault(year, {}).setdefault(brand, {})[m] = v
+
     # Assemble output
     output = {
         "data": {
@@ -125,6 +145,8 @@ def main():
             "yoy_growth_rates": yoy_growth_rates,
         },
         "brand_data": brand_data,
+        "brand_revenue": brand_rev_data,
+        "brand_profit": brand_profit_data,
     }
     
     with open(out_path, 'w') as f:

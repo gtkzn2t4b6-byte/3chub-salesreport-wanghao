@@ -1536,6 +1536,8 @@ if H:
     hdata = H['data']
     hsum = H['summaries']
     hbrand = H['brand_data']
+    hbrand_rev = H.get('brand_revenue', {})
+    hbrand_profit = H.get('brand_profit', {})
     
     # Store count
     total_stores_h = len(hdata['phone_sales'])
@@ -1617,7 +1619,65 @@ if H:
     
     rev_data = [rev_monthly.get(m, 0) / 1e6 for m in sorted_months]
     profit_data = [profit_monthly.get(m, 0) / 1e6 for m in sorted_months]
-    
+
+    # ===== 客单价/单机利润/毛利率 辅助 (奈拉 + 人民币 并列) =====
+    def _amt_cny(ngn):
+        cny = ngn * NGN_CNY_RATE
+        if abs(cny) >= 1e4: return f'≈¥{cny/1e4:.1f}万'
+        if abs(cny) >= 1e3: return f'≈¥{cny/1e3:.1f}千'
+        return f'≈¥{cny:.0f}'
+
+    def _amt_pair(ngn):
+        # 奈拉主显 + 人民币并列
+        n = fmt_naira(ngn)
+        return f'{n} <span style="color:#94a3b8;font-weight:400">{_amt_cny(ngn)}</span>'
+
+    # ===== 月度销量明细 (公司智能机零售销量): 每月 销量/客单价/单机利润/毛利率 =====
+    def _monthly_detail_rows():
+        _rows = []
+        for m in sorted_months:
+            _q = mt.get(m, 0) or 0
+            _r = rev_monthly.get(m, 0) or 0
+            _p = profit_monthly.get(m, 0) or 0
+            _atv = _r / _q if _q else 0
+            _up = _p / _q if _q else 0
+            _gm = _p / _r * 100 if _r else 0
+            _gm_c = '#16a34a' if _gm >= 10 else ('#f59e0b' if _gm >= 5 else '#dc2626')
+            _y = int(m.split('-')[0]); _mm = int(m.split('-')[1])
+            _rows.append(
+                f'<tr><td style="text-align:left;font-weight:600">{_y}年{_mm}月</td>'
+                f'<td>{_q:,.0f}</td>'
+                f'<td>{_amt_pair(_atv)}</td>'
+                f'<td>{_amt_pair(_up)}</td>'
+                f'<td style="color:{_gm_c};font-weight:600">{_gm:.1f}%</td></tr>'
+            )
+        return '\n'.join(_rows)
+    _monthly_detail_html = _monthly_detail_rows()
+
+    # ===== 品牌销量明细 (2026 YTD): 每品牌 销量/客单价/单机利润/毛利率 =====
+    def _brand_detail_rows():
+        _rows = []
+        _br26 = hbrand_rev.get('2026', {})
+        _bp26 = hbrand_profit.get('2026', {})
+        _bs26 = brands_2026  # brand -> {month: qty}
+        for b in all_brands[:8]:
+            _q = sum(v for v in _bs26.get(b, {}).values() if v is not None)
+            _r = sum(v for v in _br26.get(b, {}).values() if v is not None)
+            _p = sum(v for v in _bp26.get(b, {}).values() if v is not None)
+            _atv = _r / _q if _q else 0
+            _up = _p / _q if _q else 0
+            _gm = _p / _r * 100 if _r else 0
+            _gm_c = '#16a34a' if _gm >= 10 else ('#f59e0b' if _gm >= 5 else '#dc2626')
+            _rows.append(
+                f'<tr><td style="text-align:left;font-weight:600">{b}</td>'
+                f'<td>{_q:,.0f}</td>'
+                f'<td>{_amt_pair(_atv)}</td>'
+                f'<td>{_amt_pair(_up)}</td>'
+                f'<td style="color:{_gm_c};font-weight:600">{_gm:.1f}%</td></tr>'
+            )
+        return '\n'.join(_rows)
+    _brand_detail_html = _brand_detail_rows()
+
     # Store ranking table rows (2026 only) — include all available months
     def history_store_rows():
         store_list = []
@@ -1732,8 +1792,8 @@ if H:
 
     # 完成率图表数据 (JS): 目标 / 实际 / 完成率
     _completion_labels_js = json.dumps([f'{int(m[:4]) % 100:02d}/{int(m[5:7]):02d}' for m in _completion_months])
-    _completion_target_js = json.dumps([(_monthly_target.get(m) or 0) for m in _completion_months])
-    _completion_actual_js = json.dumps([(_completion_sales.get(m, 0) or 0) for m in _completion_months])
+    _completion_target_js = json.dumps([int(round(_monthly_target.get(m) or 0)) for m in _completion_months])
+    _completion_actual_js = json.dumps([int(round(_completion_sales.get(m, 0) or 0)) for m in _completion_months])
     _completion_rate_js = json.dumps([round((_completion_sales.get(m, 0) or 0) / _monthly_target[m] * 100, 1) if _monthly_target.get(m) else None for m in _completion_months])
 
     def _completion_table_rows():
@@ -1881,6 +1941,14 @@ if H:
     <div class="section-body">
         <div id="chart_history_monthly_wrap" style="height:420px"><canvas id="chart_history_monthly"></canvas></div>
         <div id="chart_history_monthly_all_wrap" style="display:none;height:420px"><canvas id="chart_history_monthly_all"></canvas></div>
+        <div class="tbl-wrap" style="max-height:460px;margin-top:16px">
+            <table id="tbl_history_monthly_detail"><thead><tr>
+                <th style="text-align:left">月份</th><th>销量(台)</th><th>客单价</th><th>单机利润</th><th>毛利率</th>
+            </tr></thead><tbody>
+""" + _monthly_detail_html + """
+            </tbody></table>
+            <div style="font-size:11px;color:var(--text2);margin-top:6px">客单价 = 营收 ÷ 销量 · 单机利润 = 毛利 ÷ 销量 · 毛利率 = 毛利 ÷ 营收；奈拉主显 + 人民币(≈1元≈205奈拉)并列</div>
+        </div>
     </div>
 </div>
 
@@ -1894,6 +1962,14 @@ if H:
         </div>
         <div id="brand_monthly" style="height:420px"><canvas id="chart_history_brand_monthly"></canvas></div>
         <div id="brand_share" style="display:none;height:420px"><canvas id="chart_history_brand_share"></canvas></div>
+        <div class="tbl-wrap" style="max-height:400px;margin-top:16px">
+            <table id="tbl_history_brand_detail"><thead><tr>
+                <th style="text-align:left">品牌</th><th>销量(台)</th><th>客单价</th><th>单机利润</th><th>毛利率</th>
+            </tr></thead><tbody>
+""" + _brand_detail_html + """
+            </tbody></table>
+            <div style="font-size:11px;color:var(--text2);margin-top:6px">2026 累计口径 · 客单价 = 营收 ÷ 销量 · 单机利润 = 毛利 ÷ 销量 · 毛利率 = 毛利 ÷ 营收；奈拉主显 + 人民币并列</div>
+        </div>
     </div>
 </div>
 
