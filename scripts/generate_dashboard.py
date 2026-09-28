@@ -64,8 +64,8 @@ _price_cmp_label = PS.get('compare_price_date', _cmp_m_label)
 fmt_n = lambda x: f"{x:,.0f}" if abs(x)>=1000 else f"{x:,.1f}"
 fmt_pct = lambda x: f"{x:.1f}%"
 fmt_naira = lambda x: f"₦{x/1e6:.1f}M" if abs(x)>=1e6 else f"₦{x/1e3:.0f}K"
-# 奈拉→人民币换算 (2026-09-17 定: 1元≈205奈拉, 用户口径)
-NGN_CNY_RATE = 1 / 205
+# 奈拉→人民币换算 (2026-09-28 改: 1元≈197奈拉, 网上查得2026-09实际汇率)
+NGN_CNY_RATE = 1 / 197
 def fmt_rmb(ngn):
     cny = ngn * NGN_CNY_RATE
     if abs(cny) >= 1e8: return f"≈¥{cny/1e8:.2f}亿"
@@ -1632,7 +1632,7 @@ if H:
         n = fmt_naira(ngn)
         return f'{n} <span style="color:#94a3b8;font-weight:400">{_amt_cny(ngn)}</span>'
 
-    # ===== 逐月汇率 (2026-09-24 用户提供 2024/2025 历史实际汇率; 2026 沿用 1元≈205奈拉) =====
+    # ===== 逐月汇率 (2026-09-24 用户提供 2024/2025 历史实际汇率; 2026 按网上逐月均值) =====
     # exchange_rates.json: NGN_PER_CNY = 1元人民币兑X奈拉 → 奈拉→人民币 = 金额 ÷ 该值
     _NGN_PER_CNY = {}
     try:
@@ -2055,7 +2055,7 @@ if H:
             </tr></thead><tbody>
 """ + _monthly_detail_html + """
             </tbody></table>
-            <div style="font-size:11px;color:var(--text2);margin-top:6px">金额统一人民币(¥)：2025年按各月实际汇率、2026年按 1元≈205奈拉 折算 · 客单价 = 营收 ÷ 销量 · 单机利润 = 毛利 ÷ 销量 · 毛利率 = 毛利 ÷ 营收 · 按月份降序，合计按自然年汇总</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:6px">金额统一人民币(¥)：按各月实际汇率(2026-09 约 1元≈197奈拉) 折算 · 客单价 = 营收 ÷ 销量 · 单机利润 = 毛利 ÷ 销量 · 毛利率 = 毛利 ÷ 营收 · 按月份降序，合计按自然年汇总</div>
         </div>
     </div>
 </div>
@@ -2074,7 +2074,7 @@ if H:
             </tr></thead><tbody>
 """ + _brand_detail_html + """
             </tbody></table>
-            <div style="font-size:11px;color:var(--text2);margin-top:6px">2026 累计口径 · 金额统一人民币(¥)，1元≈205奈拉 · 客单价 = 营收 ÷ 销量 · 单机利润 = 毛利 ÷ 销量 · 毛利率 = 毛利 ÷ 营收</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:6px">2026 累计口径 · 金额统一人民币(¥)，1元≈197奈拉(2026-09) · 客单价 = 营收 ÷ 销量 · 单机利润 = 毛利 ÷ 销量 · 毛利率 = 毛利 ÷ 营收</div>
         </div>
     </div>
 </div>
@@ -2461,7 +2461,7 @@ function _pctTxt(v) {
 function _fmtM(v) { return '₦' + (v / 1e6).toLocaleString(undefined, { maximumFractionDigits: 1 }) + 'M'; }
 function _fmtRmb(v, m) {
     if (v === null || v === undefined || !isFinite(v)) return '—';
-    var ngnPerCny = (m && HIST.rates && HIST.rates[m]) ? HIST.rates[m] : 205;
+    var ngnPerCny = (m && HIST.rates && HIST.rates[m]) ? HIST.rates[m] : 197;
     var cny = v / ngnPerCny;
     if (Math.abs(cny) >= 1e8) return '¥' + (cny / 1e8).toFixed(2) + '亿';
     if (Math.abs(cny) >= 1e4) return '¥' + (cny / 1e4).toFixed(1) + '万';
@@ -4844,7 +4844,7 @@ if K:
         <div class="kpi-label">手机零售额 YTD <span style="font-weight:400">(RMB)</span></div>
         <div class="kpi-value" style="color:#2563eb">¥{_rev_ytd/1e8:.2f}亿 <span style="font-size:0.45em;color:#94a3b8">/ ¥{_rev_annual/1e8:.2f}亿</span></div>
         <div class="kpi-sub">完成率 <b style="color:{_rcol(_rev_rate, _tp)}">{_rev_rate*100:.1f}%</b>（进度差 {_rev_diff:+.1f}pp）
-            <div style="margin-top:3px;color:#94a3b8">奈拉口径 {fmt_naira(_rev_ngn_ytd)} · 固定汇率 1元≈205奈拉 折算</div>
+            <div style="margin-top:3px;color:#94a3b8">奈拉口径 {fmt_naira(_rev_ngn_ytd)} · 固定汇率 1元≈197奈拉 折算</div>
         </div>
     </div>
     <div class="kpi-card">
@@ -4879,7 +4879,7 @@ if K:
             </tr></thead><tbody>{_brand_tbl}</tbody></table>
         </div>
         <div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.7">
-            口径: 智能机含平板 · 分品牌任务 = 传音月度任务 ÷ 3 均分(月均口径) · RMB 按固定汇率 1元≈205奈拉 折算
+            口径: 智能机含平板 · 分品牌任务 = 传音月度任务 ÷ 3 均分(月均口径) · RMB 按固定汇率 1元≈197奈拉 折算
             · 年度目标为任务拆解表口径, 与门店月度 TARGET 口径不同, 不可直接对比
         </div>
     </div>

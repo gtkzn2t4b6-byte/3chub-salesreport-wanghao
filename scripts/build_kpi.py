@@ -38,7 +38,7 @@ KPI_STORE_MODEL_RATIO = 0.30                          # 单店模型月目标占
 NONPHONE_SHARE_TH = 0.15                              # 单店模型: 非手机内占比阈值
 NONPHONE_MARGIN_TH = 0.20                             # 单店模型: 非手机毛利率阈值
 ACCESSORY_RATIO_TARGET = 0.60                         # 配件配比率目标
-NGN_CNY_RATE_FALLBACK = 1 / 205                       # 汇率兜底(2026-09-17 定, 1元≈205奈拉, 用户口径)
+NGN_CNY_RATE_FALLBACK = 1 / 197                       # 汇率兜底(2026-09-28 改: 1元≈197奈拉, 网上查得9月实际值)
 CLOSED_DEPTS = {'D_IGANDO-IKOTUN ROAD-LAGOS', 'D_MSL MUSHIN2-ISOLO ROAD-LAGOS'}  # 已关店剔除
 YEAR = 2026
 
@@ -361,7 +361,7 @@ def main():
             'months_available': months,
             'rate_default': round(NGN_CNY_RATE_FALLBACK, 6),
             'rate_source': rate_source,
-            'rate_note': '全年按固定 1 元≈205 奈拉(用户口径)' if not rates else '使用逐月汇率',
+            'rate_note': '全年按固定 1 元≈197 奈拉(2026-09 实测)' if not rates else '使用逐月汇率',
             'brand_alloc_source': 'missing',
             'revenue_scope': REVENUE_SCOPE,
             'include_tablet_in_smart': INCLUDE_TABLET_IN_SMART,
