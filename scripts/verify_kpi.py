@@ -26,7 +26,7 @@ def check(name, got, expect, tol=0.0):
 
 
 def load(fpath):
-    df = pd.read_excel(fpath)
+    df = pd.read_excel(fpath, engine='calamine')
     df.columns = [re.sub(r'\s+', '', str(c)) for c in df.columns]
     df = df[~df['销售部门'].isin(CLOSED)]
     df['品牌'] = df['品牌'].astype(str).str.strip().str.upper()

@@ -64,10 +64,9 @@ def clean_store_name(name):
 def read_sales(fpath):
     """读销售明细, 只取需要的列, 基础清洗. 返回 df 或 None."""
     try:
+        df = pd.read_excel(fpath, engine='calamine')
+    except Exception:
         df = pd.read_excel(fpath)
-    except Exception as e:
-        print(f"  ❌ 读取失败 {fpath}: {e}")
-        return None
     df = normalize_spaces(df)
     missing = [c for c in NEED_COLS if c not in df.columns]
     if missing:

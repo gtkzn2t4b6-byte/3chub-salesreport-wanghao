@@ -50,10 +50,9 @@ def main():
         print(f"Processing {ym}: {fpath}")
         
         try:
+            df = pd.read_excel(fpath, engine='calamine')
+        except Exception:
             df = pd.read_excel(fpath)
-        except Exception as e:
-            print(f"  ❌ Error reading: {e}")
-            continue
         
         # 品类销量分布 (全品类, 过滤前采集; 供"月度完成情况-品类分布")
         _cat_df = df[df['销售数量'] > 0].copy()

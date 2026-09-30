@@ -40,7 +40,7 @@ print("数据自检：原始 Excel 重算  vs  dashboard_full.json")
 print("=" * 78)
 
 # ---------- 销售 ----------
-s = norm(pd.read_excel(args.sales))
+s = norm(pd.read_excel(args.sales, engine='calamine'))
 s = s[~s['销售部门'].isin(CLOSED_DEPTS)]
 smart = s[s['统计分类'].isin(SMART_CATS)]
 
@@ -123,7 +123,7 @@ check("门店任务表销量 + 无任务部门销量", smart['销售数量'].sum
 
 # ---------- 库存 ----------
 print("\n[5] 库存维度 (m6)")
-inv = norm(pd.read_excel(args.inventory))
+inv = norm(pd.read_excel(args.inventory, engine='calamine'))
 inv = inv.dropna(subset=['仓库'])
 inv['可卖数'] = inv['可卖数'].fillna(0)
 inv = inv[~inv['仓库'].astype(str).str.contains('MUSHIN2-PHONES|IGANDO-PHONES', na=False)]
