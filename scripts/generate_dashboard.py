@@ -3569,6 +3569,154 @@ var _dm = (function(){
 dm_js = dm_js.replace('__NGN_RATE__', repr(NGN_CNY_RATE))
 
 
+# ===== Module 22: 门店销售明细查询 (前端) =====
+# HTML / JS 均为普通字符串, 由 {m22_html} / {m22_js} 注入主 f-string 模板 (避免花括号转义)
+m22_html = """
+<div class="section analysis-only" data-mod="store" id="sec_m22">
+    <div class="section-header">
+        <div class="section-title"><span class="num">22</span> 门店销售明细查询</div>
+        <div style="font-size:11px;color:var(--muted)">手机口径（智能机+平板+功能机）· 选门店后可切「本月累计 / 单日」· 支持型号、品牌关键词过滤</div>
+    </div>
+    <div class="section-body">
+        <div style="display:flex;align-items:flex-end;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:4px">
+                <label style="font-size:11px;color:var(--muted)">门店</label>
+                <select id="m22_store" onchange="m22Render()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;min-width:230px;cursor:pointer"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+                <label style="font-size:11px;color:var(--muted)">统计范围</label>
+                <select id="m22_range" onchange="m22Render()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;cursor:pointer"></select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+                <label style="font-size:11px;color:var(--muted)">关键词过滤</label>
+                <input id="m22_kw" type="text" placeholder="型号 / 品牌，如 SPARK、TECNO" oninput="m22Render()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;min-width:200px">
+            </div>
+            <button onclick="m22Reset()" style="padding:7px 14px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:13px;cursor:pointer">重置</button>
+        </div>
+        <div id="m22_cards" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+        <div class="tbl-wrap" style="max-height:560px">
+            <table id="tbl_m22"><thead><tr>
+                <th>#</th><th>型号</th><th>品牌</th><th>品类</th>
+                <th>销量</th><th>销售额</th><th>毛利</th><th>毛利率</th><th>均价</th><th>占比</th>
+            </tr></thead><tbody id="m22_tbody"></tbody></table>
+        </div>
+        <div id="m22_hint" style="font-size:11px;color:var(--muted);margin-top:8px"></div>
+    </div>
+</div>
+"""
+
+m22_js = """
+// ===== Module 22: 门店销售明细查询 =====
+var M22 = (D.m22_store_sales) || {models:[], meta:[], days:[], stores:[]};
+var M22_CUM = '__cum__';
+
+function m22Ngn(n){
+    if(n===null||n===undefined) return '\\u2014';
+    n=Math.round(n);
+    var neg=n<0; n=Math.abs(n);
+    var s=String(n), out='';
+    while(s.length>3){ out=','+s.slice(-3)+out; s=s.slice(0,-3); }
+    return (neg?'-':'')+'\\u20a6'+s+out;
+}
+function m22Pct(x){ return (x===null||x===undefined||isNaN(x))?'\\u2014':x.toFixed(1)+'%'; }
+
+function m22Init(){
+    var sel=document.getElementById('m22_store');
+    if(!sel||sel.getAttribute('data-ready')) return;
+    sel.setAttribute('data-ready','1');
+    if(!M22.stores||!M22.stores.length) return;
+    M22.stores.forEach(function(s,i){
+        var o=document.createElement('option');
+        o.value=i; o.textContent=s.short+'（月销 '+s.tq+' 台）';
+        sel.appendChild(o);
+    });
+    var rng=document.getElementById('m22_range');
+    var c=document.createElement('option');
+    c.value=M22_CUM; c.textContent='\\ud83d\\udcc5 本月累计（'+M22.days.length+' 个营业日）';
+    rng.appendChild(c);
+    M22.days.slice().reverse().forEach(function(d){
+        var o=document.createElement('option');
+        o.value=d; o.textContent=d.slice(5)+' 单日';
+        rng.appendChild(o);
+    });
+    m22Render();
+}
+function m22Reset(){
+    var k=document.getElementById('m22_kw'); if(k) k.value='';
+    var r=document.getElementById('m22_range'); if(r) r.value=M22_CUM;
+    m22Render();
+}
+function m22Render(){
+    var sel=document.getElementById('m22_store');
+    if(!sel||sel.value==='') return;
+    var s=M22.stores[parseInt(sel.value)]; if(!s) return;
+    var range=document.getElementById('m22_range').value;
+    var kwEl=document.getElementById('m22_kw');
+    var kwRaw=(kwEl&&kwEl.value?kwEl.value:'').trim();
+    var kw=kwRaw.toLowerCase();
+    var isCum=(range===M22_CUM);
+    var rows=isCum?(s.rows||[]):((s.daily&&s.daily[range])||[]);
+    var label=isCum?'本月累计':(range.slice(5)+' 单日');
+    if(kw){
+        rows=rows.filter(function(r){
+            var m=(M22.models[r[0]]||'').toLowerCase();
+            var b=((M22.meta[r[0]]||[''])[0]||'').toLowerCase();
+            return m.indexOf(kw)>=0||b.indexOf(kw)>=0;
+        });
+    }
+    var tq=0,tr=0,tp=0;
+    rows.forEach(function(r){ tq+=r[1]; tr+=r[2]; tp+=r[3]; });
+    var margin=tr>0?tp/tr*100:0;
+
+    var cards=[['销量',tq.toLocaleString('en-US')+' 台',''],['销售额',m22Ngn(tr),''],
+               ['毛利',m22Ngn(tp),''],['毛利率',m22Pct(margin),''],['在售型号',rows.length+' 款',s.short]];
+    document.getElementById('m22_cards').innerHTML=cards.map(function(c){
+        return '<div style="flex:1;min-width:148px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px">'
+            +'<div style="font-size:11px;color:var(--muted);margin-bottom:4px">'+c[0]+'</div>'
+            +'<div style="font-size:17px;font-weight:700;color:var(--text)">'+c[1]+'</div>'
+            +(c[2]?'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+c[2]+'</div>':'')
+            +'</div>';
+    }).join('');
+
+    var tb=document.getElementById('m22_tbody');
+    if(!rows.length){
+        tb.innerHTML='<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:24px">'
+            +(kwRaw?('没有匹配 「'+kwRaw+'」 的型号'):('该门店 '+label+' 无销售记录'))+'</td></tr>';
+    } else {
+        var tot=tq>0?tq:1;
+        tb.innerHTML=rows.map(function(r,i){
+            var mi=r[0],q=r[1],rv=r[2],pf=r[3];
+            var mm=M22.meta[mi]||['',''];
+            var mg=rv>0?pf/rv*100:0;
+            var avg=q>0?rv/q:0;
+            var share=q/tot*100;
+            return '<tr>'
+                +'<td style="color:var(--muted)">'+(i+1)+'</td>'
+                +'<td style="font-weight:600">'+M22.models[mi]+'</td>'
+                +'<td>'+((mm[0])||'\\u2014')+'</td>'
+                +'<td style="color:var(--muted)">'+((mm[1])||'')+'</td>'
+                +'<td style="font-weight:600">'+q.toLocaleString('en-US')+'</td>'
+                +'<td>'+m22Ngn(rv)+'</td>'
+                +'<td>'+m22Ngn(pf)+'</td>'
+                +'<td>'+m22Pct(mg)+'</td>'
+                +'<td>'+m22Ngn(avg)+'</td>'
+                +'<td>'+m22Pct(share)+'</td>'
+                +'</tr>';
+        }).join('');
+    }
+    document.getElementById('m22_hint').textContent='共 '+rows.length+' 款型号 · 门店「'+s.short+'」· '+label
+        +(kwRaw?(' · 关键词「'+kwRaw+'」'):'')+' · 金额单位奈拉(₦)，占比 = 该型号销量 ÷ 当前列表销量合计';
+}
+
+(function(){
+    function boot(){ m22Init(); }
+    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot);
+    else boot();
+})();
+"""
+# 注: Unicode 转义 (\u2014 —, \u20a6 ₦, \ud83d\udcc5 📅) 避免 f-string/编码问题
+
+
 def overview_dm_section():
     """总览速览: 日/月销售核心摘要 (Module 20/21 精华, 静态渲染, 交互明细在汇报精简版)"""
     d20 = D.get('m20_daily_detail') or {}
@@ -4250,6 +4398,9 @@ TOP5门店贡献智能机{top5_pct:.0f}%，尾部10门店仅贡献{tail10_pct:.0
         </div>
     </div>
 </div>
+
+<!-- M22: Store Sales Detail Query -->
+{m22_html}
 
 <!-- M5: Company Daily Summary -->
 <div class="section analysis-only" data-mod="overview">
@@ -5463,6 +5614,8 @@ window.addEventListener('DOMContentLoaded', () => {{
 }});
 
 {dm_js}
+
+{m22_js}
 
 // ===== Model Analysis Filter & Sort =====
 let m10SortCol = -1;

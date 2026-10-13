@@ -321,6 +321,43 @@ if pv:
     else:
         ok.append(f"  OK   调价生效日(split_date)与销售成交价重算一致")
 
+# ---------- 门店销售明细 (Module 22) ----------
+_m22 = d.get('m22_store_sales') or {}
+if _m22.get('stores'):
+    _pc = ['智能机', '平板电脑', '功能机']
+    _sp = s[s['统计分类'].isin(_pc)]
+    _vq, _vr, _vp = _sp['销售数量'].sum(), _sp['零售金额'].sum(), _sp['毛利'].sum()
+    _jq = sum(x.get('tq', 0) for x in _m22['stores'])
+    _jr = sum(x.get('tr', 0) for x in _m22['stores'])
+    _jp = sum(x.get('tp', 0) for x in _m22['stores'])
+    check("门店销售明细 累计销量 = 手机品类", _vq, _jq)
+    check("门店销售明细 累计销售额 = 手机品类", _vr, _jr, tol=max(1000, _vr * 0.001))
+    check("门店销售明细 累计毛利 = 手机品类", _vp, _jp, tol=max(1000, _vp * 0.001))
+    check("门店销售明细 门店数", _sp['销售部门'].nunique(), len(_m22['stores']))
+    _nmod = len(_m22['models'])
+    _bad_idx = sum(1 for st in _m22['stores'] for r in st.get('rows', []) if not (0 <= r[0] < _nmod))
+    if _bad_idx:
+        fail.append(f"  FAIL 门店销售明细 型号索引越界 {_bad_idx} 行")
+    else:
+        ok.append(f"  OK   门店销售明细 型号索引均在字典范围内 ({_nmod} 个型号)")
+    _day_bad = []
+    for st in _m22['stores']:
+        _cum = {r[0]: (r[1], r[2], r[3]) for r in st.get('rows', [])}
+        _ds = {}
+        for _dt, _rows in (st.get('daily') or {}).items():
+            for r in _rows:
+                a = _ds.setdefault(r[0], [0, 0, 0])
+                a[0] += r[1]; a[1] += r[2]; a[2] += r[3]
+        if set(_ds) != set(_cum):
+            _day_bad.append(st.get('short')); continue
+        for k, v in _ds.items():
+            if abs(v[0] - _cum[k][0]) > 0 or abs(v[1] - _cum[k][1]) > 1 or abs(v[2] - _cum[k][2]) > 1:
+                _day_bad.append(st.get('short')); break
+    if _day_bad:
+        fail.append(f"  FAIL 门店销售明细 单日之和≠本月累计 {len(_day_bad)} 家: {_day_bad[:5]}")
+    else:
+        ok.append(f"  OK   门店销售明细 各门店单日之和 = 本月累计 ({len(_m22['stores'])} 家)")
+
 print("\n".join(ok))
 print()
 if fail:

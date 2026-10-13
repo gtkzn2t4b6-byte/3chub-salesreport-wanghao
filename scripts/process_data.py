@@ -2488,6 +2488,69 @@ _month_detail = {
 }
 print(f"  Month detail: cur {len(_month_detail['cur']['brands'])} brands, prev {len(_month_detail['prev']['brands'])} brands | vs {_prev_label}")
 
+# ========== MODULE 22: STORE SALES DETAIL (门店销售明细查询) ==========
+# 手机口径(智能机+平板+功能机)。按 门店×型号 输出本月累计 + 各营业日单日明细。
+# 体积优化：型号走共享字典(_mi 索引)，每行 [型号索引, 销量, 零售金额, 毛利]。
+print("Module 22: Store sales detail...")
+_jp = june[june['统计分类'].isin(PHONE_CATS)].copy()
+_jp['品牌'] = _jp['品牌'].fillna('OTHER').astype(str).str.strip().replace('', 'OTHER')
+_jp['型号'] = _jp['型号'].fillna('').astype(str).str.strip()
+_jp = _jp[_jp['型号'] != '']
+_jp['_d'] = _jp['记账日期'].dt.strftime('%Y-%m-%d')
+
+# 型号字典（含品牌/品类元信息）
+_md = _jp.groupby('型号').agg(brand=('品牌', 'first'), cat=('统计分类', 'first')).reset_index()
+_md = _md.sort_values('型号')
+_model_list = _md['型号'].tolist()
+_mi = {m: i for i, m in enumerate(_model_list)}
+_model_meta = [[r['brand'], r['cat']] for _, r in _md.iterrows()]
+
+# 营业日（实际有销售数据的日期）
+_days = sorted(_jp['_d'].unique())
+
+# 单日明细 (门店, 日, 型号)
+_g = _jp.groupby(['销售部门', '_d', '型号']).agg(
+    q=('销售数量', 'sum'), r=('零售金额', 'sum'), p=('毛利', 'sum')).reset_index()
+_daily_map = {}
+for _, row in _g.iterrows():
+    _daily_map.setdefault(row['销售部门'], {}).setdefault(row['_d'], []).append(
+        [_mi[row['型号']], int(round(float(row['q']))), int(round(float(row['r']))), int(round(float(row['p'])))])
+
+# 本月累计 = 各营业日之和（保证与单日切换口径严格一致, 避免分别取整产生误差）
+_cum_map = {}
+for _dept, _daysd in _daily_map.items():
+    _acc = {}
+    for _d, _rows in _daysd.items():
+        for _r in _rows:
+            _a = _acc.setdefault(_r[0], [0, 0, 0])
+            _a[0] += _r[1]; _a[1] += _r[2]; _a[2] += _r[3]
+    _cum_map[_dept] = [[_k, _v[0], _v[1], _v[2]] for _k, _v in _acc.items()]
+
+# 门店列表按累计销量降序
+_store_sales_detail = {
+    'models': _model_list,
+    'meta': _model_meta,
+    'days': _days,
+    'stores': [],
+}
+for dept in sorted(_cum_map.keys(), key=lambda d: -sum(x[1] for x in _cum_map[d])):
+    rows = sorted(_cum_map[dept], key=lambda x: -x[1])
+    daily = {}
+    for d in _days:
+        dr = _daily_map.get(dept, {}).get(d)
+        if dr:
+            daily[d] = sorted(dr, key=lambda x: -x[1])
+    _store_sales_detail['stores'].append({
+        'dept': dept,
+        'short': store_long_to_short.get(dept, dept),
+        'tq': sum(x[1] for x in rows),
+        'tr': sum(x[2] for x in rows),
+        'tp': sum(x[3] for x in rows),
+        'rows': rows,
+        'daily': daily,
+    })
+print(f"  Store sales detail: {len(_store_sales_detail['stores'])} stores, {len(_model_list)} models, {len(_g)} store-day-model rows")
+
 output = {
     'meta': {
         'report_date': today_str,
@@ -2566,6 +2629,8 @@ output = {
     # ===== 日销售情况 / 月度完成情况 (Module 20/21) =====
     'm20_daily_detail': _daily_detail,
     'm21_month_detail': _month_detail,
+    # ===== 门店销售明细查询 (Module 22) =====
+    'm22_store_sales': _store_sales_detail,
 }
 
 outpath = args.out
