@@ -16108,5 +16108,109 @@ function initKpiCharts() {
 }());
 </script>
 
+
+<!-- Store task region feature -->
+<style>#store-region-controls { margin-bottom:18px; }
+.store-region-toolbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+.store-region-label { font-weight:700; font-size:13px; }
+.store-region-buttons { display:flex; gap:6px; }
+.store-region-buttons button { padding:9px 16px; min-height:42px; border:1px solid #cbd5e1; border-radius:8px; color:#334155; background:#fff; font:600 13px var(--font); cursor:pointer; }
+.store-region-buttons button[aria-pressed="true"] { background:#2563eb; color:#fff; border-color:#2563eb; }
+.store-region-buttons button:focus-visible { outline:3px solid #93c5fd; outline-offset:2px; }
+#store-region-status { color:#475569; font-size:12px; }
+.store-region-comparison { overflow:auto; border:1px solid #dbe4ef; border-radius:10px; }
+.store-region-comparison table { min-width:650px; font-variant-numeric:tabular-nums; }
+.store-region-comparison th, .store-region-comparison td { padding:11px 12px; text-align:right; }
+.store-region-comparison th { cursor:default; }
+.store-region-comparison th:first-child { text-align:left; }
+.store-region-comparison tbody th { position:static; background:transparent; cursor:default; }
+.store-region-comparison tr.store-region-selected { background:#eff6ff !important; }
+.store-region-rate { color:#1d4ed8; font-weight:750; }
+.store-region-note { margin-top:9px; color:#475569; font-size:11px; line-height:1.7; }
+.store-region-badge { display:block; font-size:10px; font-weight:400; color:#64748b; }
+#tbl_m1 tfoot th, #tbl_m1 tfoot td { position:sticky; bottom:0; background:#eff6ff; color:#0f172a; border-top:2px solid #bfdbfe; font-weight:700; z-index:3; }
+@media(max-width:768px) { .store-region-toolbar { gap:8px; } #store-region-status { flex-basis:100%; } .store-region-buttons button { padding:9px 12px; } }
+</style>
+<script>(function () {
+  'use strict';
+  const REGIONS = ['all', 'hub', 'msl'];
+  const LABELS = {all: '全部门店', hub: '3C HUB', msl: 'MSL'};
+  function classify(store) {
+    return /^D_MSL(?:[\s_-]|$)/i.test(String(store.dept || '').trim()) ? 'msl' : 'hub';
+  }
+  function summarize(stores, days) {
+    const sum = (key) => stores.reduce((n, s) => n + (Number(s[key]) || 0), 0);
+    const target = sum('target'), qty = sum('qty');
+    const remaining = stores.reduce((n,s) => n + Math.max(0, Number(s.target)-Number(s.qty)), 0);
+    return {count: stores.length, target, qty, rate: target > 0 ? qty / target * 100 : null,
+      remaining, daily: days > 0 ? remaining / days : (remaining > 0 ? null : 0)};
+  }
+  if (typeof module !== 'undefined' && module.exports) module.exports = {classify, summarize};
+  if (typeof document === 'undefined') return;
+  function init() {
+    const table = document.getElementById('tbl_m1');
+    if (!table || document.getElementById('store-region-controls') || typeof D === 'undefined') return;
+    const stores = [...D.m1_store_target].sort((a,b) => b.rate-a.rate);
+    const rows = Array.from(table.tBodies[0].rows);
+    if (rows.length !== stores.length) return;
+    const days = Number(D.meta.remaining_days) || 0;
+    const body = table.closest('.section-body');
+    const tiers = body.querySelector('.tier-grid');
+    const nf = new Intl.NumberFormat('zh-CN', {maximumFractionDigits: 0});
+    const fmt = n => n === null ? '—' : nf.format(n);
+    const pct = n => n === null ? '—' : n.toFixed(1)+'%';
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    rows.forEach((row,i) => {
+      row.dataset.taskRegion = classify(stores[i]);
+      row.dataset.taskDept = stores[i].dept;
+      row.cells[1].title = stores[i].dept;
+      const badge = document.createElement('span');
+      badge.className = 'store-region-badge';
+      badge.textContent = LABELS[row.dataset.taskRegion];
+      row.cells[1].appendChild(badge);
+    });
+    const panel = document.createElement('div');
+    panel.id = 'store-region-controls';
+    panel.innerHTML = '<div class="store-region-toolbar"><span class="store-region-label">区域筛选</span><div class="store-region-buttons" role="group" aria-label="门店任务区域">'+REGIONS.map(key => '<button type="button" data-task-region="'+key+'" aria-pressed="false">'+LABELS[key]+'</button>').join('')+'</div><span id="store-region-status" role="status" aria-live="polite"></span></div><div class="store-region-comparison"><table aria-label="区域任务与销量汇总"><thead><tr><th scope="col">区域</th><th scope="col">门店数</th><th scope="col">月度任务</th><th scope="col">累计智能机</th><th scope="col">完成率</th><th scope="col">剩余任务</th><th scope="col">日均需达成</th></tr></thead><tbody>'+REGIONS.map(key => {
+      const data = summarize(stores.filter(s => key==='all' || classify(s)===key), days);
+      return '<tr data-summary-region="'+key+'"><th scope="row">'+LABELS[key]+'</th><td>'+fmt(data.count)+'</td><td>'+fmt(data.target)+'</td><td>'+fmt(data.qty)+'</td><td class="store-region-rate">'+pct(data.rate)+'</td><td>'+fmt(data.remaining)+'</td><td>'+fmt(data.daily)+'</td></tr>';
+    }).join('')+'</tbody></table></div><p class="store-region-note">仅统计有月度任务的门店，不含电商等无任务部门。MSL 按销售部门 D_MSL 前缀识别，其余归入 3C HUB。完成率＝销量合计 ÷ 任务合计；剩余任务按各店未完成任务求和，日均需达成按剩余 '+days+' 个营业日计算。</p>';
+    body.insertBefore(panel, tiers || body.firstChild);
+    function select(region, updateUrl) {
+      if (!REGIONS.includes(region)) region = 'all';
+      const selected = stores.filter(s => region==='all' || classify(s)===region);
+      const sum = summarize(selected, days);
+      rows.forEach(row => { row.style.display = region==='all' || row.dataset.taskRegion===region ? '' : 'none'; });
+      panel.querySelectorAll('button[data-task-region]').forEach(btn => btn.setAttribute('aria-pressed', String(btn.dataset.taskRegion===region)));
+      panel.querySelectorAll('[data-summary-region]').forEach(row => row.classList.toggle('store-region-selected', row.dataset.summaryRegion===region));
+      document.getElementById('store-region-status').textContent = LABELS[region]+' · '+sum.count+' 家门店 · 完成率 '+pct(sum.rate);
+      if (tiers) {
+        tiers.innerHTML = (D.m1_tier_summary || []).map(t => {
+          const members = selected.filter(s => s.tier===t.tier);
+          const data = summarize(members, days);
+          const color = /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : '#64748b';
+          return '<div class="tier-card" style="border-left:3px solid '+color+'"><div class="tier-name">'+esc(t.tier)+' ('+data.count+'家)</div><div class="tier-rate">'+pct(data.rate)+'</div><div class="tier-detail">销量 '+fmt(data.qty)+' / 任务 '+fmt(data.target)+'</div><div class="tier-stores">'+members.slice(0,5).map(s=>esc(s.short)).join(', ')+(members.length>5?'…':'')+'</div></div>';
+        }).join('');
+      }
+      const foot = table.tFoot || table.createTFoot();
+      foot.innerHTML = '<tr><th scope="row" colspan="2">'+LABELS[region]+'合计 · '+sum.count+' 家</th><td>'+fmt(sum.target)+'</td><td>'+fmt(sum.qty)+'</td><td>'+pct(sum.rate)+'</td><td>'+fmt(sum.remaining)+'</td><td>'+fmt(sum.daily)+'</td><td>—</td><td>—</td></tr>';
+      if (updateUrl) {
+        try {const url = new URL(location.href); if(region==='all') url.searchParams.delete('taskRegion'); else url.searchParams.set('taskRegion',region); history.replaceState(null,'',url);} catch (_) {}
+      }
+    }
+    panel.querySelectorAll('button[data-task-region]').forEach(btn => btn.addEventListener('click', () => select(btn.dataset.taskRegion,true)));
+    let initial = 'all';
+    try {initial = new URL(location.href).searchParams.get('taskRegion') || 'all';} catch (_) {}
+    select(initial, false);
+    addEventListener('popstate', () => {
+      let key='all'; try {key=new URL(location.href).searchParams.get('taskRegion') || 'all';} catch (_) {}
+      select(key,false);
+    });
+  }
+  // Existing footer calculations initialize first, then regional totals take ownership of this table.
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', init); else init();
+}());
+</script>
+<!-- End store task region feature -->
 </body>
 </html>
